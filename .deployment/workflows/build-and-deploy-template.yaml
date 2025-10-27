@@ -17,7 +17,7 @@ spec:
   volumes:
     - name: ssh-key
       secret:
-        secretName: github-ssh-key
+        secretName: git-ssh-key
         defaultMode: 0600
     - name: docker-config
       secret:
