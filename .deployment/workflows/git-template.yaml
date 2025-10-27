@@ -17,7 +17,7 @@ spec:
           - name: repository
           - name: branch
           - name: app-name
-            default: "admin"
+            default: "iraven"
       container:
         image: harbor.kousha.dev/library/alpine-ci:3.18
         command: ["/bin/bash", "-c"]
@@ -56,14 +56,14 @@ spec:
             # Commit and push the change
             cd /workspace
             git add ${VERSION_FILE}
-            git commit -m "Deploy ${APP_NAME}-api version {{inputs.parameters.docker-tag}} to Harbor" || { echo "No changes to commit"; exit 0; }
+            git commit -m "Deploy ${APP_NAME}-admin version {{inputs.parameters.docker-tag}} to Harbor" || { echo "No changes to commit"; exit 0; }
 
             # Push with retry logic for race conditions
             MAX_RETRIES=3
             RETRY_COUNT=0
             while [ $RETRY_COUNT -lt $MAX_RETRIES ]; do
               if git push origin {{inputs.parameters.branch}}; then
-                echo "Successfully pushed ${APP_NAME} API version {{inputs.parameters.docker-tag}}"
+                echo "Successfully pushed ${APP_NAME} admin version {{inputs.parameters.docker-tag}}"
                 exit 0
               else
                 echo "Push failed, attempt $((RETRY_COUNT + 1))/$MAX_RETRIES. Pulling and retrying..."

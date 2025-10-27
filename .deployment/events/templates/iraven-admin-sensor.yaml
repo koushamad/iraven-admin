@@ -30,8 +30,8 @@ spec:
                 generateName: iraven-admin-workflow-
                 namespace: argo-workflows
               spec:
-                serviceAccountName: workflow-executor
-                entrypoint: build-and-deploy
+                serviceAccountName: iraven-admin-workflow-sa
+                entrypoint: build-and-deploy-dag
                 arguments:
                   parameters:
                     - name: repository
@@ -45,7 +45,7 @@ spec:
                     - name: namespace
                       value: "iraven-admin"
                 workflowTemplateRef:
-                  name: iraven-admin-build-and-deploy
+                  name: iraven-admin-build-and-deploy-template
           parameters:
             - src:
                 dependencyName: iraven-admin-webhook

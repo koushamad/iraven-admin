@@ -28,7 +28,7 @@ spec:
             cd /workspace || { echo "Failed to change to workspace directory"; exit 1; }
 
             APP_NAME={{inputs.parameters.app-name}}
-            IMAGE_NAME="${APP_NAME}-api"
+            IMAGE_NAME="${APP_NAME}-admin"
 
             echo "Building ${IMAGE_NAME} Docker image (APP_NAME=${APP_NAME})..."
             docker build --build-arg APP_NAME=${APP_NAME} -t $DOCKER_USERNAME/${IMAGE_NAME}:{{inputs.parameters.docker-tag}} . || { echo "Failed to build ${IMAGE_NAME} Docker image"; exit 1; }

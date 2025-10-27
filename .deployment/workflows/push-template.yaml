@@ -30,7 +30,7 @@ spec:
             echo "$HARBOR_PASSWORD" | docker login harbor.kousha.dev -u $HARBOR_USERNAME --password-stdin || { echo "Failed to login to Harbor"; exit 1; }
 
             APP_NAME={{inputs.parameters.app-name}}
-            IMAGE_NAME="${APP_NAME}-api"
+            IMAGE_NAME="${APP_NAME}-admin"
 
             echo "Importing ${IMAGE_NAME} Docker image from tar file..."
             docker load -i /workspace/${IMAGE_NAME}-{{inputs.parameters.docker-tag}}.tar || { echo "Failed to import ${IMAGE_NAME} Docker image"; exit 1; }
