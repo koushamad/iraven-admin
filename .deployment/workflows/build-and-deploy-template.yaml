@@ -10,7 +10,7 @@ spec:
       - name: repository
         value: "git@github.com:koushamad/iraven-admin.git"
       - name: branch
-        value: "master"
+        value: "main"
       - name: commit
         value: ""
       - name: docker-tag
