@@ -30,14 +30,14 @@ spec:
                 generateName: iraven-admin-workflow-
                 namespace: argo-workflows
               spec:
-                serviceAccountName: iraven-admin-workflow-sa
+                serviceAccountName: workflow-executor
                 entrypoint: build-and-deploy-dag
                 arguments:
                   parameters:
                     - name: repository
                       value: "git@github.com:koushamad/iraven-admin.git"
                     - name: branch
-                      value: "master"
+                      value: "main"
                     - name: commit
                       value: "{{$}}"
                     - name: docker-tag
@@ -45,7 +45,7 @@ spec:
                     - name: namespace
                       value: "iraven-admin"
                 workflowTemplateRef:
-                  name: iraven-admin-build-and-deploy-template
+                  name: iraven-admin-build-and-deploy
           parameters:
             - src:
                 dependencyName: iraven-admin-webhook
