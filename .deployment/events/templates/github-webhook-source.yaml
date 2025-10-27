@@ -11,5 +11,5 @@ spec:
   webhook:
     iraven-admin-webhook:
       port: "12000"
-      endpoint: /iraven-admin-webhook
+      endpoint: "/iraven-admin-webhook"
       method: POST

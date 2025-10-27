@@ -1,25 +1,24 @@
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
-  name: iraven-admin-webhook-ingress
+  name: iraven-admin-github-webhook-ingress
   namespace: {{ .Values.namespace }}
   annotations:
-    kubernetes.io/ingress.class: "nginx"
-    cert-manager.io/cluster-issuer: "letsencrypt-k3s-ha01"
-    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    cert-manager.io/issuer: letsencrypt-{{ .Values.clusterName }}
+    kubernetes.io/ingress.class: nginx
 spec:
-  tls:
-    - hosts:
-        - events.kousha.dev
-      secretName: events-kousha-dev-tls
   rules:
     - host: events.kousha.dev
       http:
         paths:
-          - path: /iraven-admin-webhook
-            pathType: Prefix
-            backend:
+          - backend:
               service:
-                name: iraven-admin-github-webhook-eventsource-svc
+                name: iraven-api-github-webhook-eventsource-svc
                 port:
                   number: 12000
+            path: /iraven-admin-webhook
+            pathType: Prefix
+  tls:
+    - hosts:
+        - events.kousha.dev
+      secretName: events-tls-cert

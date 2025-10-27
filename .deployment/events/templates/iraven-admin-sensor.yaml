@@ -4,51 +4,54 @@ metadata:
   name: iraven-admin-sensor
   namespace: {{ .Values.namespace }}
 spec:
+  template:
+    serviceAccountName: argo-events-sa
   dependencies:
     - name: iraven-admin-webhook
       eventSourceName: iraven-admin-github-webhook
       eventName: iraven-admin-webhook
-
   triggers:
     - template:
-        name: iraven-admin-workflow-trigger
+        name: log-trigger
+        log:
+          message: "Received webhook event: {{ .Input }}"
+    - template:
+        name: iraven-admin-build-workflow
         k8s:
+          group: argoproj.io
+          version: v1alpha1
+          resource: workflows
           operation: create
           source:
             resource:
               apiVersion: argoproj.io/v1alpha1
               kind: Workflow
               metadata:
-                generateName: iraven-admin-build-deploy-
-                namespace: argo
+                generateName: iraven-admin-workflow-
+                namespace: argo-workflows
               spec:
-                serviceAccountName: workflow-executor
-                entrypoint: build-and-deploy
-                workflowTemplateRef:
-                  name: iraven-admin-build-and-deploy
+                serviceAccountName: iraven-admin-workflow-sa
+                entrypoint: build-and-deploy-dag
                 arguments:
                   parameters:
                     - name: repository
-                      value: ""
+                      value: "git@github.com:koushamad/iraven-admin.git"
                     - name: branch
-                      value: "main"
+                      value: "master"
+                    - name: commit
+                      value: "{{$}}"
                     - name: docker-tag
-                      value: ""
-                    - name: app-name
-                      value: "admin"
+                      value: "{{$}}"
                     - name: namespace
                       value: "iraven-admin"
+                workflowTemplateRef:
+                  name: iraven-admin-build-and-deploy-template
           parameters:
             - src:
                 dependencyName: iraven-admin-webhook
-                dataKey: body.repository
-              dest: spec.arguments.parameters.0.value
-            - src:
-                dependencyName: iraven-admin-webhook
-                dataKey: body.tag
+                dataKey: body.commit
               dest: spec.arguments.parameters.2.value
             - src:
                 dependencyName: iraven-admin-webhook
-                dataKey: body.branch
-                value: "main"
-              dest: spec.arguments.parameters.1.value
+                dataKey: body.short_commit
+              dest: spec.arguments.parameters.3.value
