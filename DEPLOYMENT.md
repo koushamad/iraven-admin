@@ -161,7 +161,7 @@ spec:
   source:
     repoURL: git@github.com:koushamad/iraven-admin.git
     targetRevision: main
-    path: .deployment/iraven-admin
+    path: .deployment/admin
     helm:
       valueFiles:
         - values.yaml
