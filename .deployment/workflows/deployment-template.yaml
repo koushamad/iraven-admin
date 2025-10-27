@@ -16,7 +16,7 @@ spec:
           - name: docker-tag
       container:
         image: harbor.kousha.dev/library/kubectl:latest
-        command: ["/bin/bash", "-c"]
+        command: ["/bin/sh", "-c"]
         args:
           - |
             echo "🚀 Waiting for deployment to be ready..."
