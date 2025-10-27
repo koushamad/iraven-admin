@@ -1,1 +1,1 @@
-namespace: argo-events
+clusterName: "k3s-ha01"
