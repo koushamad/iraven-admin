@@ -26,7 +26,7 @@ config:
     port: 5432
     database: "postgres"
     username: "postgres"
-    password: "your-super-secret-postgres-password"
+    password: "ccedfef5f12a83873eb501a24cf621aa"
     sslmode: "disable"
     max_connections: 25
     max_idle_connections: 5
