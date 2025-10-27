@@ -35,7 +35,7 @@ spec:
                     - name: docker-tag
                       value: ""
                     - name: app-name
-                      value: "iraven-admin"
+                      value: "admin"
                     - name: namespace
                       value: "iraven-admin"
           parameters:
