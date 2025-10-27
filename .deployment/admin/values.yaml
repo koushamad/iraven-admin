@@ -91,12 +91,13 @@ ingress:
       hosts:
         - admin.iraven.io
 
-# Deployment strategy
+# Deployment strategy for Argo Rollouts
 strategy:
-  type: RollingUpdate
-  rollingUpdate:
-    maxSurge: 1
-    maxUnavailable: 0
+  type: "blueGreen"
+  blueGreen:
+    autoPromotionEnabled: true
+    autoPromotionSeconds: 60
+    scaleDownDelaySeconds: 120
 
 # Horizontal Pod Autoscaling
 autoscaling:

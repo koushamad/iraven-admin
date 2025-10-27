@@ -60,6 +60,13 @@ ingress:
       hosts:
         - admin.iraven.io
 
+strategy:
+  type: "blueGreen"
+  blueGreen:
+    autoPromotionEnabled: true
+    autoPromotionSeconds: 60
+    scaleDownDelaySeconds: 120
+
 autoscaling:
   enabled: true
   minReplicas: 2

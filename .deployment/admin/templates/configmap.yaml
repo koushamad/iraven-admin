@@ -1,0 +1,47 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "iraven-admin.fullname" . }}-config
+  labels:
+    {{- include "iraven-admin.labels" . | nindent 4 }}
+  annotations:
+    meta.helm.sh/release-name: {{ .Release.Name }}
+    meta.helm.sh/release-namespace: {{ .Release.Namespace }}
+data:
+  config.yaml: |
+    environment: "{{ .Values.config.environment }}"
+    {{- if hasKey .Values.config "debug" }}
+    debug: {{ .Values.config.debug }}
+    {{- end }}
+
+    server:
+      host: "{{ .Values.config.server.host }}"
+      port: {{ .Values.config.server.port }}
+
+    database:
+      host: "{{ .Values.config.database.host }}"
+      port: {{ .Values.config.database.port }}
+      database: "{{ .Values.config.database.database }}"
+      username: "{{ .Values.config.database.username }}"
+      password: "{{ .Values.config.database.password }}"
+      sslmode: "{{ .Values.config.database.sslmode }}"
+      max_connections: {{ .Values.config.database.max_connections }}
+      max_idle_connections: {{ .Values.config.database.max_idle_connections }}
+
+    {{- if hasKey .Values.config "api" }}
+    api:
+      base_url: "{{ .Values.config.api.base_url }}"
+      timeout: {{ .Values.config.api.timeout }}
+    {{- end }}
+
+    {{- if hasKey .Values.config "auth" }}
+    auth:
+      jwt_secret: "{{ .Values.config.auth.jwt_secret }}"
+      session_duration: {{ .Values.config.auth.session_duration }}
+    {{- end }}
+
+    {{- if hasKey .Values.config "admin" }}
+    admin:
+      default_page_size: {{ .Values.config.admin.default_page_size }}
+      max_page_size: {{ .Values.config.admin.max_page_size }}
+    {{- end }}
