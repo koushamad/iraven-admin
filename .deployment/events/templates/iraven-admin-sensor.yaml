@@ -31,7 +31,7 @@ spec:
                 namespace: argo-workflows
               spec:
                 serviceAccountName: workflow-executor
-                entrypoint: build-and-deploy-dag
+                entrypoint: build-and-deploy
                 arguments:
                   parameters:
                     - name: repository
