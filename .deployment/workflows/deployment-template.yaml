@@ -1,4 +1,3 @@
-# workflows/deployment-template.yaml
 apiVersion: argoproj.io/v1alpha1
 kind: WorkflowTemplate
 metadata:
@@ -6,41 +5,87 @@ metadata:
 spec:
   templates:
     - name: wait-for-deployment
+      retryStrategy:
+        limit: 5
+        backoff:
+          duration: "30s"
+          factor: 2
       inputs:
         parameters:
-          - name: app-name
-            default: "iraven-admin"
           - name: namespace
-            default: "iraven-admin"
-          - name: timeout
-            default: "300"
+          - name: docker-tag
       container:
-        image: harbor.kousha.dev/library/alpine-ci:3.18
-        command: ["/bin/bash", "-c"]
+        image: harbor.kousha.dev/library/kubectl:latest
+        command: ["/bin/sh", "-c"]
         args:
           - |
-            echo "Waiting for ArgoCD to sync {{inputs.parameters.app-name}} in namespace {{inputs.parameters.namespace}}"
-            echo "Timeout: {{inputs.parameters.timeout}} seconds"
-
-            ELAPSED=0
-            INTERVAL=10
-            TIMEOUT={{inputs.parameters.timeout}}
-
-            while [ $ELAPSED -lt $TIMEOUT ]; do
-              echo "Checking deployment status... ($ELAPSED/$TIMEOUT seconds)"
-
-              # Check if deployment is ready using kubectl
-              if kubectl -n {{inputs.parameters.namespace}} get deployment {{inputs.parameters.app-name}} &>/dev/null; then
-                READY=$(kubectl -n {{inputs.parameters.namespace}} get deployment {{inputs.parameters.app-name}} -o jsonpath='{.status.conditions[?(@.type=="Available")].status}')
-                if [ "$READY" == "True" ]; then
-                  echo "✅ Deployment {{inputs.parameters.app-name}} is ready!"
-                  exit 0
+            echo "🚀 Waiting for deployment to be ready..."
+            
+            NAMESPACE="{{inputs.parameters.namespace}}"
+            DOCKER_TAG="{{inputs.parameters.docker-tag}}"
+            
+            echo "Checking deployment in namespace: $NAMESPACE"
+            echo "Expected image tag: $DOCKER_TAG"
+            
+            # Wait for rollout to exist (ArgoCD might take some time to create it)
+            echo "⏳ Waiting for rollout to be created by ArgoCD..."
+            for i in {1..60}; do
+                if kubectl get rollout iraven-admin -n $NAMESPACE >/dev/null 2>&1; then
+                    echo "✅ Rollout found!"
+                    break
                 fi
-              fi
-
-              sleep $INTERVAL
-              ELAPSED=$((ELAPSED + INTERVAL))
+                echo "Attempt $i: Rollout not found, waiting 10 seconds..."
+                echo "Current rollouts in namespace $NAMESPACE:"
+                kubectl get rollouts -n $NAMESPACE || echo "No rollouts found or permission denied"
+                sleep 10
+                if [ $i -eq 60 ]; then
+                    echo "❌ Rollout not found after 10 minutes"
+                    echo "Available resources:"
+                    kubectl get all -n $NAMESPACE || echo "Cannot list resources"
+                    exit 1
+                fi
             done
+            
+            # Wait for rollout to be ready
+            echo "⏳ Waiting for rollout to be ready..."
+            echo "Current rollout status:"
+            kubectl describe rollout iraven-admin -n $NAMESPACE || echo "Cannot describe rollout"
 
-            echo "❌ Deployment did not become ready within ${TIMEOUT} seconds"
-            exit 1
+            # Use kubectl wait for Argo Rollouts CRD (not kubectl rollout status which only works with native k8s resources)
+            kubectl wait --for=condition=Completed rollout/iraven-admin -n $NAMESPACE --timeout=600s
+            
+            if [ $? -eq 0 ]; then
+                echo "✅ Deployment is ready!"
+            
+                # Verify the correct image is deployed
+                CURRENT_IMAGE=$(kubectl get rollout iraven-admin -n $NAMESPACE -o jsonpath='{.spec.template.spec.containers[0].image}')
+                echo "Current deployed image: $CURRENT_IMAGE"
+            
+                if [[ "$CURRENT_IMAGE" == *"$DOCKER_TAG"* ]]; then
+                    echo "✅ Correct image version deployed!"
+                else
+                    echo "⚠️  Image version mismatch, but proceeding..."
+                fi
+            
+                # Additional health check
+                echo "🔍 Performing health check..."
+                sleep 30  # Give the service time to fully start
+            
+                SERVICE_NAME="iraven-admin-service"
+                if kubectl get service $SERVICE_NAME -n $NAMESPACE >/dev/null 2>&1; then
+                    echo "✅ Service $SERVICE_NAME is available"
+                else
+                    echo "⚠️  Service $SERVICE_NAME not found, but proceeding..."
+                fi
+            
+            else
+                echo "❌ Deployment failed or timed out"
+                exit 1
+            fi
+        resources:
+          requests:
+            cpu: 50m
+            memory: 64Mi
+          limits:
+            cpu: 100m
+            memory: 128Mi

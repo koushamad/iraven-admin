@@ -1,4 +1,3 @@
-# workflows/build-template.yaml
 apiVersion: argoproj.io/v1alpha1
 kind: WorkflowTemplate
 metadata:
@@ -6,24 +5,51 @@ metadata:
 spec:
   templates:
     - name: build-image
+      retryStrategy:
+        limit: 10
+        backoff:
+          duration: "30s"
+          factor: 2
       inputs:
         parameters:
           - name: docker-tag
           - name: app-name
-            default: "iraven-admin"
+            default: "iraven"
       container:
-        image: gcr.io/kaniko-project/executor:latest
-        command: []
+        image: harbor.kousha.dev/library/docker:20.10.16-dind
+        command: ["/bin/bash", "-c"]
         args:
-          - "--dockerfile=/workspace/Dockerfile"
-          - "--context=/workspace"
-          - "--destination=harbor.kousha.dev/application-images/{{inputs.parameters.app-name}}:{{inputs.parameters.docker-tag}}"
-          - "--cache=true"
-          - "--cache-ttl=24h"
-          - "--compressed-caching=false"
-          - "--snapshot-mode=redo"
+          - |
+            # Set up Docker daemon (already optimized)
+            dockerd-entrypoint.sh &
+            echo "Waiting for Docker daemon to start..."
+            sleep 10
+
+            cd /workspace || { echo "Failed to change to workspace directory"; exit 1; }
+
+            APP_NAME={{inputs.parameters.app-name}}
+            IMAGE_NAME="${APP_NAME}-api"
+
+            echo "Building ${IMAGE_NAME} Docker image (APP_NAME=${APP_NAME})..."
+            docker build --build-arg APP_NAME=${APP_NAME} -t $DOCKER_USERNAME/${IMAGE_NAME}:{{inputs.parameters.docker-tag}} . || { echo "Failed to build ${IMAGE_NAME} Docker image"; exit 1; }
+            echo "${IMAGE_NAME} Docker image built successfully!"
+
+            echo "Exporting ${IMAGE_NAME} Docker image to tar file..."
+            docker save $DOCKER_USERNAME/${IMAGE_NAME}:{{inputs.parameters.docker-tag}} -o /workspace/${IMAGE_NAME}-{{inputs.parameters.docker-tag}}.tar || { echo "Failed to export ${IMAGE_NAME} Docker image"; exit 1; }
+            echo "${IMAGE_NAME} Docker image exported successfully!"
+        env:
+          - name: DOCKER_USERNAME
+            valueFrom:
+              secretKeyRef:
+                name: docker-hub-credentials
+                key: username
+          - name: DOCKER_PASSWORD
+            valueFrom:
+              secretKeyRef:
+                name: docker-hub-credentials
+                key: password
+        securityContext:
+          privileged: true
         volumeMounts:
           - name: workspace
             mountPath: /workspace
-          - name: docker-config
-            mountPath: /kaniko/.docker

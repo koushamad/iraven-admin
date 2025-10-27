@@ -1,101 +1,137 @@
-# workflows/build-and-deploy-template.yaml
 apiVersion: argoproj.io/v1alpha1
 kind: WorkflowTemplate
 metadata:
-  name: iraven-admin-build-and-deploy
+  name: iraven-admin-build-and-deploy-template
 spec:
-  entrypoint: build-and-deploy
-  volumeClaimTemplates:
-    - metadata:
-        name: workspace
-      spec:
-        accessModes: ["ReadWriteOnce"]
-        resources:
-          requests:
-            storage: 5Gi
+  serviceAccountName: iraven-admin-workflow-sa
+  entrypoint: build-and-deploy-dag
+  arguments:
+    parameters:
+      - name: repository
+        value: "git@github.com:koushamad/iraven-admin.git"
+      - name: branch
+        value: "master"
+      - name: commit
+        value: ""
+      - name: docker-tag
+        value: "latest"
+      - name: namespace
+        value: "iraven-admin"
+  templates:
+    - name: build-and-deploy-dag
+      dag:
+        tasks:
+          - name: clone-repository
+            templateRef:
+              name: iraven-admin-clone-template
+              template: clone-repository
+            arguments:
+              parameters:
+                - name: repository
+                  value: "{{workflow.parameters.repository}}"
+                - name: branch
+                  value: "{{workflow.parameters.branch}}"
+                - name: commit
+                  value: "{{workflow.parameters.commit}}"
+            retryStrategy:
+              limit: 3
+              retryPolicy: "Always"
+              backoff:
+                duration: "5m"
+                factor: 1
+                maxDuration: "15m"
+
+          # Build images in parallel
+          - name: build-iraven-image
+            templateRef:
+              name: iraven-admin-build-template
+              template: build-image
+            dependencies: ["clone-repository"]
+            arguments:
+              parameters:
+                - name: docker-tag
+                  value: "{{workflow.parameters.docker-tag}}"
+                - name: app-name
+                  value: "iraven"
+            retryStrategy:
+              limit: 3
+              retryPolicy: "Always"
+              backoff:
+                duration: "5m"
+                factor: 1
+                maxDuration: "15m"
+
+          # Push images in parallel (after their respective builds)
+          - name: push-iraven-image
+            templateRef:
+              name: iraven-admin-push-template
+              template: push-image
+            dependencies: ["build-iraven-image"]
+            arguments:
+              parameters:
+                - name: docker-tag
+                  value: "{{workflow.parameters.docker-tag}}"
+                - name: app-name
+                  value: "iraven"
+            retryStrategy:
+              limit: 3
+              retryPolicy: "Always"
+              backoff:
+                duration: "5m"
+                factor: 1
+                maxDuration: "15m"
+
+          # Update version files in parallel (after their respective pushes)
+          - name: update-iraven-version
+            templateRef:
+              name: iraven-admin-git-template
+              template: update-version-and-push
+            dependencies: ["push-iraven-image"]
+            arguments:
+              parameters:
+                - name: docker-tag
+                  value: "{{workflow.parameters.docker-tag}}"
+                - name: repository
+                  value: "{{workflow.parameters.repository}}"
+                - name: branch
+                  value: "{{workflow.parameters.branch}}"
+                - name: app-name
+                  value: "iraven"
+
+          # Wait for deployments in parallel (each depends on its own version update)
+          - name: wait-for-iraven-deployment
+            templateRef:
+              name: iraven-admin-deployment-template
+              template: wait-for-deployment
+            dependencies: ["update-iraven-version"]
+            arguments:
+              parameters:
+                - name: namespace
+                  value: "iraven-admin"
+                - name: docker-tag
+                  value: "{{workflow.parameters.docker-tag}}"
+            retryStrategy:
+              limit: 5
+              retryPolicy: "Always"
+              backoff:
+                duration: "30s"
+                factor: 1.5
+                maxDuration: "10m"
 
   volumes:
     - name: ssh-key
       secret:
         secretName: git-ssh-key
         defaultMode: 0600
-    - name: docker-config
-      secret:
-        secretName: harbor-registry-secret
-        items:
-          - key: .dockerconfigjson
-            path: config.json
+    - name: workspace
+      persistentVolumeClaim:
+        claimName: "{{workflow.name}}-workspace"
 
-  templates:
-    - name: build-and-deploy
-      inputs:
-        parameters:
-          - name: repository
-          - name: branch
-            default: "main"
-          - name: docker-tag
-          - name: app-name
-            default: "admin"
-          - name: namespace
-            default: "iraven-admin"
-      steps:
-        - - name: clone
-            templateRef:
-              name: iraven-admin-clone-template
-              template: clone-repo
-            arguments:
-              parameters:
-                - name: repository
-                  value: "{{inputs.parameters.repository}}"
-                - name: branch
-                  value: "{{inputs.parameters.branch}}"
-
-        - - name: build
-            templateRef:
-              name: iraven-admin-build-template
-              template: build-image
-            arguments:
-              parameters:
-                - name: docker-tag
-                  value: "{{inputs.parameters.docker-tag}}"
-                - name: app-name
-                  value: "{{inputs.parameters.app-name}}"
-
-        - - name: push
-            templateRef:
-              name: iraven-admin-push-template
-              template: push-image-tags
-            arguments:
-              parameters:
-                - name: docker-tag
-                  value: "{{inputs.parameters.docker-tag}}"
-                - name: app-name
-                  value: "{{inputs.parameters.app-name}}"
-
-        - - name: update-version
-            templateRef:
-              name: iraven-admin-git-template
-              template: update-version-and-push
-            arguments:
-              parameters:
-                - name: docker-tag
-                  value: "{{inputs.parameters.docker-tag}}"
-                - name: repository
-                  value: "{{inputs.parameters.repository}}"
-                - name: branch
-                  value: "{{inputs.parameters.branch}}"
-                - name: app-name
-                  value: "{{inputs.parameters.app-name}}"
-
-        - - name: wait-deployment
-            templateRef:
-              name: iraven-admin-deployment-template
-              template: wait-for-deployment
-            arguments:
-              parameters:
-                - name: app-name
-                  value: "{{inputs.parameters.app-name}}"
-                - name: namespace
-                  value: "{{inputs.parameters.namespace}}"
-                - name: timeout
-                  value: "300"
+  volumeClaimTemplates:
+    - metadata:
+        name: workspace
+      spec:
+        accessModes: [ "ReadWriteOnce" ]
+        resources:
+          requests:
+            storage: 1Gi

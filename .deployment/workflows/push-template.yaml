@@ -1,20 +1,63 @@
-# workflows/push-template.yaml
 apiVersion: argoproj.io/v1alpha1
 kind: WorkflowTemplate
 metadata:
   name: iraven-admin-push-template
 spec:
   templates:
-    - name: push-image-tags
+    - name: push-image
+      retryStrategy:
+        limit: 10
+        backoff:
+          duration: "30s"
+          factor: 2
       inputs:
         parameters:
           - name: docker-tag
           - name: app-name
-            default: "iraven-admin"
+            default: "iraven"
       container:
-        image: harbor.kousha.dev/library/alpine-ci:3.18
-        command: ["/bin/bash", "-c"]
+        image: harbor.kousha.dev/library/docker:20.10.16-dind
+        command: ["/bin/sh", "-c"]
         args:
           - |
-            echo "Image {{inputs.parameters.app-name}}:{{inputs.parameters.docker-tag}} has been built and pushed to Harbor"
-            echo "Image is available at: harbor.kousha.dev/application-images/{{inputs.parameters.app-name}}:{{inputs.parameters.docker-tag}}"
+            # Set up Docker daemon
+            dockerd-entrypoint.sh &
+            echo "Waiting for Docker daemon to start..."
+            sleep 10
+
+            # Log in to Harbor
+            echo "Logging in to Harbor..."
+            echo "$HARBOR_PASSWORD" | docker login harbor.kousha.dev -u $HARBOR_USERNAME --password-stdin || { echo "Failed to login to Harbor"; exit 1; }
+
+            APP_NAME={{inputs.parameters.app-name}}
+            IMAGE_NAME="${APP_NAME}-api"
+
+            echo "Importing ${IMAGE_NAME} Docker image from tar file..."
+            docker load -i /workspace/${IMAGE_NAME}-{{inputs.parameters.docker-tag}}.tar || { echo "Failed to import ${IMAGE_NAME} Docker image"; exit 1; }
+            echo "${IMAGE_NAME} Docker image imported successfully!"
+
+            LOCAL_IMAGE="koushamad/${IMAGE_NAME}:{{inputs.parameters.docker-tag}}"
+            REMOTE_IMAGE="harbor.kousha.dev/application-images/${IMAGE_NAME}:{{inputs.parameters.docker-tag}}"
+
+            echo "Tagging ${IMAGE_NAME} image for Harbor repo..."
+            docker tag $LOCAL_IMAGE $REMOTE_IMAGE || { echo "Failed to tag ${IMAGE_NAME} image"; exit 1; }
+
+            echo "Pushing ${IMAGE_NAME} Docker image to Harbor..."
+            docker push $REMOTE_IMAGE || { echo "Failed to push ${IMAGE_NAME} Docker image"; exit 1; }
+            echo "${IMAGE_NAME} Docker image pushed successfully to Harbor!"
+        env:
+          - name: HARBOR_USERNAME
+            valueFrom:
+              secretKeyRef:
+                name: harbor-credentials
+                key: username
+          - name: HARBOR_PASSWORD
+            valueFrom:
+              secretKeyRef:
+                name: harbor-credentials
+                key: password
+        securityContext:
+          privileged: true
+        volumeMounts:
+          - name: workspace
+            mountPath: /workspace

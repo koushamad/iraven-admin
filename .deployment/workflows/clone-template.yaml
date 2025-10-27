@@ -1,34 +1,54 @@
-# workflows/clone-template.yaml
 apiVersion: argoproj.io/v1alpha1
 kind: WorkflowTemplate
 metadata:
   name: iraven-admin-clone-template
 spec:
   templates:
-    - name: clone-repo
+    - name: clone-repository
+      retryStrategy:
+        limit: 3
+        backoff:
+          duration: "10s"
+          factor: 2
       inputs:
         parameters:
           - name: repository
           - name: branch
-            default: "main"
+          - name: commit
       container:
         image: harbor.kousha.dev/library/alpine-ci:3.18
         command: ["/bin/bash", "-c"]
         args:
           - |
-            # Set up SSH for Git
+            # Set up SSH for Git (tools already installed)
             mkdir -p /root/.ssh
             cp /ssh-keys/id_rsa /root/.ssh/id_rsa
             chmod 600 /root/.ssh/id_rsa
-
+            
             # Add GitHub to known hosts
             ssh-keyscan github.com >> /root/.ssh/known_hosts
-
-            # Clone the repository
-            git clone --depth 1 --branch {{inputs.parameters.branch}} {{inputs.parameters.repository}} /workspace
-
-            echo "Successfully cloned repository"
-            ls -la /workspace
+            
+            # Clone repository using SSH
+            echo "Cloning repository from {{inputs.parameters.repository}}..."
+            git clone {{inputs.parameters.repository}} /workspace || { echo "Failed to clone repository"; exit 1; }
+            
+            cd /workspace || { echo "Failed to change to workspace directory"; exit 1; }
+            
+            echo "Checking out branch {{inputs.parameters.branch}}..."
+            git checkout {{inputs.parameters.branch}} || { echo "Failed to checkout branch"; exit 1; }
+            
+            if [ -n "{{inputs.parameters.commit}}" ]; then
+              echo "Resetting to commit {{inputs.parameters.commit}}..."
+              git reset --hard {{inputs.parameters.commit}} || { echo "Failed to reset to commit"; exit 1; }
+            fi
+            
+            # Verify Dockerfile exists
+            if [ ! -f Dockerfile ]; then
+              echo "Error: Dockerfile not found in repository"
+              exit 1
+            fi
+            
+            echo "Repository cloned successfully!"
         volumeMounts:
           - name: workspace
             mountPath: /workspace
