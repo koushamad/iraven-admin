@@ -15,7 +15,7 @@
 # ==============================================================================
 # STAGE 1: Builder
 # ==============================================================================
-ARG GO_VERSION=1.24
+ARG GO_VERSION=1.23
 FROM harbor.kousha.dev/library/golang:${GO_VERSION}-alpine AS builder
 
 # Set working directory
@@ -23,6 +23,9 @@ WORKDIR /app
 
 # Install build dependencies
 RUN apk add --no-cache git ca-certificates tzdata
+
+# Allow Go to auto-download the required toolchain version
+ENV GOTOOLCHAIN=auto
 
 # Copy go.mod and go.sum for dependency caching
 # This layer is cached unless dependencies change
