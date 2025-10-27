@@ -1,0 +1,147 @@
+{{template "base" .}}
+
+{{define "content"}}
+<h1 class="mb-4"><i class="bi bi-gear"></i> System Monitor</h1>
+
+<div class="row">
+    <div class="col-md-6">
+        <div class="card">
+            <div class="card-header">
+                <h5 class="mb-0"><i class="bi bi-server"></i> Server Status</h5>
+            </div>
+            <div class="card-body">
+                <table class="table table-borderless mb-0">
+                    <tr>
+                        <th style="width: 150px;">Status:</th>
+                        <td>
+                            <span class="badge bg-success">{{.Metrics.Server.Status}}</span>
+                        </td>
+                    </tr>
+                    <tr>
+                        <th>Version:</th>
+                        <td>{{.Metrics.Server.Version}}</td>
+                    </tr>
+                    <tr>
+                        <th>Uptime:</th>
+                        <td>{{.Metrics.Server.Uptime}} seconds</td>
+                    </tr>
+                </table>
+            </div>
+        </div>
+
+        <div class="card mt-3">
+            <div class="card-header">
+                <h5 class="mb-0"><i class="bi bi-memory"></i> Memory Usage</h5>
+            </div>
+            <div class="card-body">
+                <table class="table table-borderless mb-0">
+                    <tr>
+                        <th style="width: 150px;">Used:</th>
+                        <td>{{.Metrics.Memory.Used}} bytes</td>
+                    </tr>
+                    <tr>
+                        <th>Total:</th>
+                        <td>{{.Metrics.Memory.Total}} bytes</td>
+                    </tr>
+                    <tr>
+                        <th>Available:</th>
+                        <td>{{.Metrics.Memory.Available}} bytes</td>
+                    </tr>
+                    <tr>
+                        <th>Percent:</th>
+                        <td>
+                            <div class="progress">
+                                <div class="progress-bar" role="progressbar" style="width: {{printf "%.2f" .Metrics.Memory.Percent}}%">
+                                    {{printf "%.2f" .Metrics.Memory.Percent}}%
+                                </div>
+                            </div>
+                        </td>
+                    </tr>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-md-6">
+        <div class="card">
+            <div class="card-header">
+                <h5 class="mb-0"><i class="bi bi-database"></i> Database Status</h5>
+            </div>
+            <div class="card-body">
+                <table class="table table-borderless mb-0">
+                    <tr>
+                        <th style="width: 150px;">Status:</th>
+                        <td>
+                            {{if eq .Metrics.Database.Status "Connected"}}
+                            <span class="badge bg-success">{{.Metrics.Database.Status}}</span>
+                            {{else}}
+                            <span class="badge bg-danger">{{.Metrics.Database.Status}}</span>
+                            {{end}}
+                        </td>
+                    </tr>
+                    <tr>
+                        <th>Connections:</th>
+                        <td>{{.Metrics.Database.Connections}}</td>
+                    </tr>
+                    <tr>
+                        <th>Latency:</th>
+                        <td>{{printf "%.2f" .Metrics.Database.Latency}} ms</td>
+                    </tr>
+                    <tr>
+                        <th>Actions:</th>
+                        <td>
+                            <a href="/system/database" class="btn btn-sm btn-info">View Stats</a>
+                            <a href="/system/backups" class="btn btn-sm btn-primary">Backups</a>
+                        </td>
+                    </tr>
+                </table>
+            </div>
+        </div>
+
+        <div class="card mt-3">
+            <div class="card-header">
+                <h5 class="mb-0"><i class="bi bi-cpu"></i> CPU & Runtime</h5>
+            </div>
+            <div class="card-body">
+                <table class="table table-borderless mb-0">
+                    <tr>
+                        <th style="width: 150px;">CPU Cores:</th>
+                        <td>{{.Metrics.CPU.CoreCount}}</td>
+                    </tr>
+                    <tr>
+                        <th>Goroutines:</th>
+                        <td>{{.Metrics.CPU.Goroutines}}</td>
+                    </tr>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row mt-4">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-header">
+                <h5 class="mb-0"><i class="bi bi-tools"></i> System Actions</h5>
+            </div>
+            <div class="card-body">
+                <div class="d-flex gap-2">
+                    <form method="POST" action="/system/cache/clear" onsubmit="return confirm('Clear all cache?');">
+                        <button type="submit" class="btn btn-warning">
+                            <i class="bi bi-trash"></i> Clear Cache
+                        </button>
+                    </form>
+                    <form method="POST" action="/system/backups/create" onsubmit="return confirm('Create database backup?');">
+                        <button type="submit" class="btn btn-primary">
+                            <i class="bi bi-download"></i> Create Backup
+                        </button>
+                    </form>
+                    <a href="/system/database" class="btn btn-info">
+                        <i class="bi bi-bar-chart"></i> Database Statistics
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{{end}}

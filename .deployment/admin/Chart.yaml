@@ -1,0 +1,6 @@
+apiVersion: v2
+name: iraven-admin
+description: A Helm chart for the iRaven Admin Dashboard
+type: application
+version: 0.1.0
+appVersion: "1.0.0"

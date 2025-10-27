@@ -1,0 +1,52 @@
+{{template "base" .}}
+
+{{define "content"}}
+<h1 class="mb-4"><i class="bi bi-database"></i> Supabase Tables</h1>
+
+<div class="alert alert-info">
+    <i class="bi bi-info-circle"></i> Browse and view data from your Supabase (public schema) tables
+</div>
+
+<div class="card">
+    <div class="card-body">
+        <div class="table-responsive">
+            <table class="table table-hover">
+                <thead>
+                    <tr>
+                        <th>Schema</th>
+                        <th>Table Name</th>
+                        <th>Row Count</th>
+                        <th>Description</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {{range .Tables}}
+                    <tr>
+                        <td><span class="badge bg-secondary">{{.Schema}}</span></td>
+                        <td><strong>{{.TableName}}</strong></td>
+                        <td>{{.RowCount}} rows</td>
+                        <td>
+                            {{if .Description}}
+                            {{.Description}}
+                            {{else}}
+                            <span class="text-muted">No description</span>
+                            {{end}}
+                        </td>
+                        <td>
+                            <a href="/supabase/{{.TableName}}" class="btn btn-sm btn-primary">
+                                <i class="bi bi-table"></i> Browse
+                            </a>
+                        </td>
+                    </tr>
+                    {{else}}
+                    <tr>
+                        <td colspan="5" class="text-center">No Supabase tables found in public schema</td>
+                    </tr>
+                    {{end}}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+{{end}}

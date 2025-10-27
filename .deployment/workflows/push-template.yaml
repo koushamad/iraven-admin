@@ -1,0 +1,20 @@
+# workflows/push-template.yaml
+apiVersion: argoproj.io/v1alpha1
+kind: WorkflowTemplate
+metadata:
+  name: iraven-admin-push-template
+spec:
+  templates:
+    - name: push-image-tags
+      inputs:
+        parameters:
+          - name: docker-tag
+          - name: app-name
+            default: "iraven-admin"
+      container:
+        image: harbor.kousha.dev/library/alpine-ci:3.18
+        command: ["/bin/bash", "-c"]
+        args:
+          - |
+            echo "Image {{inputs.parameters.app-name}}:{{inputs.parameters.docker-tag}} has been built and pushed to Harbor"
+            echo "Image is available at: harbor.kousha.dev/application-images/{{inputs.parameters.app-name}}:{{inputs.parameters.docker-tag}}"

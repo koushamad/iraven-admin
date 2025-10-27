@@ -1,0 +1,68 @@
+# Production values for K3S HA01 cluster
+replicaCount: 2
+
+image:
+  repository: harbor.kousha.dev/application-images/iraven-admin
+  pullPolicy: IfNotPresent
+
+resources:
+  limits:
+    cpu: 500m
+    memory: 512Mi
+  requests:
+    cpu: 100m
+    memory: 128Mi
+
+config:
+  environment: "production"
+  debug: false
+
+  server:
+    host: "0.0.0.0"
+    port: 8081
+
+  database:
+    host: "iraven-supabase-postgresql.iraven-supabase.svc.cluster.local"
+    port: 5432
+    database: "postgres"
+    username: "postgres"
+    password: "your-super-secret-postgres-password"
+    sslmode: "disable"
+    max_connections: 25
+    max_idle_connections: 5
+
+  api:
+    base_url: "https://api.iraven.io"
+    timeout: 30
+
+  auth:
+    jwt_secret: "change_this_jwt_secret_in_production_min_32_chars"
+    session_duration: 86400
+
+  admin:
+    default_page_size: 20
+    max_page_size: 100
+
+ingress:
+  enabled: true
+  className: "nginx"
+  annotations:
+    cert-manager.io/cluster-issuer: "letsencrypt-k3s-ha01"
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/force-ssl-redirect: "true"
+  hosts:
+    - host: admin.iraven.io
+      paths:
+        - path: /
+          pathType: Prefix
+  tls:
+    - secretName: iraven-admin-tls-cert
+      hosts:
+        - admin.iraven.io
+
+autoscaling:
+  enabled: true
+  minReplicas: 2
+  maxReplicas: 5
+  targetCPUUtilizationPercentage: 70
+  targetMemoryUtilizationPercentage: 80

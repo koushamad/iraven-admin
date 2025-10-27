@@ -1,0 +1,36 @@
+# workflows/clone-template.yaml
+apiVersion: argoproj.io/v1alpha1
+kind: WorkflowTemplate
+metadata:
+  name: iraven-admin-clone-template
+spec:
+  templates:
+    - name: clone-repo
+      inputs:
+        parameters:
+          - name: repository
+          - name: branch
+            default: "main"
+      container:
+        image: harbor.kousha.dev/library/alpine-ci:3.18
+        command: ["/bin/bash", "-c"]
+        args:
+          - |
+            # Set up SSH for Git
+            mkdir -p /root/.ssh
+            cp /ssh-keys/id_rsa /root/.ssh/id_rsa
+            chmod 600 /root/.ssh/id_rsa
+
+            # Add GitHub to known hosts
+            ssh-keyscan github.com >> /root/.ssh/known_hosts
+
+            # Clone the repository
+            git clone --depth 1 --branch {{inputs.parameters.branch}} {{inputs.parameters.repository}} /workspace
+
+            echo "Successfully cloned repository"
+            ls -la /workspace
+        volumeMounts:
+          - name: workspace
+            mountPath: /workspace
+          - name: ssh-key
+            mountPath: /ssh-keys

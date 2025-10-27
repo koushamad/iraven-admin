@@ -1,0 +1,14 @@
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: workflow-executor
+  namespace: argo
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: workflow-executor.service-account-token
+  namespace: argo
+  annotations:
+    kubernetes.io/service-account.name: workflow-executor
+type: kubernetes.io/service-account-token

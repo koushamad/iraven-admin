@@ -1,0 +1,96 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "iraven-admin.fullname" . }}
+  labels:
+    {{- include "iraven-admin.labels" . | nindent 4 }}
+spec:
+  {{- if not .Values.autoscaling.enabled }}
+  replicas: {{ .Values.replicaCount }}
+  {{- end }}
+  {{- with .Values.strategy }}
+  strategy:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+  selector:
+    matchLabels:
+      {{- include "iraven-admin.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      {{- with .Values.podAnnotations }}
+      annotations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      labels:
+        {{- include "iraven-admin.selectorLabels" . | nindent 8 }}
+    spec:
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      serviceAccountName: {{ include "iraven-admin.serviceAccountName" . }}
+      securityContext:
+        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      containers:
+      - name: {{ .Chart.Name }}
+        securityContext:
+          {{- toYaml .Values.securityContext | nindent 12 }}
+        image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
+        imagePullPolicy: {{ .Values.image.pullPolicy }}
+        ports:
+        - name: http
+          containerPort: {{ .Values.config.server.port }}
+          protocol: TCP
+        env:
+        - name: DB_HOST
+          value: {{ .Values.config.database.host | quote }}
+        - name: DB_PORT
+          value: {{ .Values.config.database.port | quote }}
+        - name: DB_USER
+          value: {{ .Values.config.database.username | quote }}
+        - name: DB_PASSWORD
+          value: {{ .Values.config.database.password | quote }}
+        - name: DB_NAME
+          value: {{ .Values.config.database.database | quote }}
+        - name: DB_SSLMODE
+          value: {{ .Values.config.database.sslmode | quote }}
+        - name: API_BASE_URL
+          value: {{ .Values.config.api.base_url | quote }}
+        - name: JWT_SECRET
+          value: {{ .Values.config.auth.jwt_secret | quote }}
+        - name: SERVER_HOST
+          value: {{ .Values.config.server.host | quote }}
+        - name: SERVER_PORT
+          value: {{ .Values.config.server.port | quote }}
+        - name: DEBUG
+          value: {{ .Values.config.debug | quote }}
+        livenessProbe:
+          httpGet:
+            path: /login
+            port: http
+          initialDelaySeconds: 15
+          periodSeconds: 20
+          timeoutSeconds: 5
+          failureThreshold: 3
+        readinessProbe:
+          httpGet:
+            path: /login
+            port: http
+          initialDelaySeconds: 5
+          periodSeconds: 10
+          timeoutSeconds: 3
+          failureThreshold: 3
+        resources:
+          {{- toYaml .Values.resources | nindent 12 }}
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}

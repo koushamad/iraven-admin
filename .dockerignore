@@ -1,0 +1,41 @@
+# Git
+.git
+.gitignore
+
+# Documentation
+*.md
+docs/
+
+# IDE
+.idea
+.vscode
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Deployment
+.deployment
+.github
+
+# Environment
+.env
+.env.*
+*.local
+
+# Build
+bin/
+dist/
+*.test
+*.out
+
+# Temporary
+tmp/
+temp/
+*.tmp
+
+# Logs
+*.log
+logs/

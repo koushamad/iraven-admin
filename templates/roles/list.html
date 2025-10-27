@@ -1,0 +1,56 @@
+{{template "base" .}}
+
+{{define "content"}}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h1><i class="bi bi-shield"></i> Roles</h1>
+    <a href="/roles/new" class="btn btn-primary">
+        <i class="bi bi-shield-plus"></i> Create Role
+    </a>
+</div>
+
+<div class="card">
+    <div class="card-body">
+        <div class="table-responsive">
+            <table class="table table-hover">
+                <thead>
+                    <tr>
+                        <th>ID</th>
+                        <th>Name</th>
+                        <th>Description</th>
+                        <th>Created At</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {{range .Roles}}
+                    <tr>
+                        <td>{{.ID}}</td>
+                        <td><strong>{{.Name}}</strong></td>
+                        <td>
+                            {{if .Description}}
+                            {{.Description}}
+                            {{else}}
+                            <span class="text-muted">No description</span>
+                            {{end}}
+                        </td>
+                        <td>{{formatDate .CreatedAt}}</td>
+                        <td>
+                            <a href="/roles/{{.ID}}" class="btn btn-sm btn-info">
+                                <i class="bi bi-eye"></i>
+                            </a>
+                            <a href="/roles/{{.ID}}/edit" class="btn btn-sm btn-warning">
+                                <i class="bi bi-pencil"></i>
+                            </a>
+                        </td>
+                    </tr>
+                    {{else}}
+                    <tr>
+                        <td colspan="5" class="text-center">No roles found</td>
+                    </tr>
+                    {{end}}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+{{end}}

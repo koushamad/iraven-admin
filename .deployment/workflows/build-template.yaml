@@ -1,0 +1,29 @@
+# workflows/build-template.yaml
+apiVersion: argoproj.io/v1alpha1
+kind: WorkflowTemplate
+metadata:
+  name: iraven-admin-build-template
+spec:
+  templates:
+    - name: build-image
+      inputs:
+        parameters:
+          - name: docker-tag
+          - name: app-name
+            default: "iraven-admin"
+      container:
+        image: gcr.io/kaniko-project/executor:latest
+        command: []
+        args:
+          - "--dockerfile=/workspace/Dockerfile"
+          - "--context=/workspace"
+          - "--destination=harbor.kousha.dev/application-images/{{inputs.parameters.app-name}}:{{inputs.parameters.docker-tag}}"
+          - "--cache=true"
+          - "--cache-ttl=24h"
+          - "--compressed-caching=false"
+          - "--snapshot-mode=redo"
+        volumeMounts:
+          - name: workspace
+            mountPath: /workspace
+          - name: docker-config
+            mountPath: /kaniko/.docker

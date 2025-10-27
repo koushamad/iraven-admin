@@ -1,0 +1,46 @@
+# workflows/deployment-template.yaml
+apiVersion: argoproj.io/v1alpha1
+kind: WorkflowTemplate
+metadata:
+  name: iraven-admin-deployment-template
+spec:
+  templates:
+    - name: wait-for-deployment
+      inputs:
+        parameters:
+          - name: app-name
+            default: "iraven-admin"
+          - name: namespace
+            default: "iraven-admin"
+          - name: timeout
+            default: "300"
+      container:
+        image: harbor.kousha.dev/library/alpine-ci:3.18
+        command: ["/bin/bash", "-c"]
+        args:
+          - |
+            echo "Waiting for ArgoCD to sync {{inputs.parameters.app-name}} in namespace {{inputs.parameters.namespace}}"
+            echo "Timeout: {{inputs.parameters.timeout}} seconds"
+
+            ELAPSED=0
+            INTERVAL=10
+            TIMEOUT={{inputs.parameters.timeout}}
+
+            while [ $ELAPSED -lt $TIMEOUT ]; do
+              echo "Checking deployment status... ($ELAPSED/$TIMEOUT seconds)"
+
+              # Check if deployment is ready using kubectl
+              if kubectl -n {{inputs.parameters.namespace}} get deployment {{inputs.parameters.app-name}} &>/dev/null; then
+                READY=$(kubectl -n {{inputs.parameters.namespace}} get deployment {{inputs.parameters.app-name}} -o jsonpath='{.status.conditions[?(@.type=="Available")].status}')
+                if [ "$READY" == "True" ]; then
+                  echo "✅ Deployment {{inputs.parameters.app-name}} is ready!"
+                  exit 0
+                fi
+              fi
+
+              sleep $INTERVAL
+              ELAPSED=$((ELAPSED + INTERVAL))
+            done
+
+            echo "❌ Deployment did not become ready within ${TIMEOUT} seconds"
+            exit 1

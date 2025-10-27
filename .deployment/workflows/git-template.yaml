@@ -1,0 +1,82 @@
+# workflows/git-template.yaml
+apiVersion: argoproj.io/v1alpha1
+kind: WorkflowTemplate
+metadata:
+  name: iraven-admin-git-template
+spec:
+  templates:
+    - name: update-version-and-push
+      retryStrategy:
+        limit: 5
+        backoff:
+          duration: "10s"
+          factor: 2
+      inputs:
+        parameters:
+          - name: docker-tag
+          - name: repository
+          - name: branch
+          - name: app-name
+            default: "iraven"
+      container:
+        image: harbor.kousha.dev/library/alpine-ci:3.18
+        command: ["/bin/bash", "-c"]
+        args:
+          - |
+            # Set up SSH for Git
+            mkdir -p /root/.ssh
+            cp /ssh-keys/id_rsa /root/.ssh/id_rsa
+            chmod 600 /root/.ssh/id_rsa
+
+            # Add GitHub to known hosts
+            ssh-keyscan github.com >> /root/.ssh/known_hosts
+
+            cd /workspace || { echo "Failed to change to workspace directory"; exit 1; }
+
+            APP_NAME={{inputs.parameters.app-name}}
+            DEPLOY_DIR=".deployment/${APP_NAME}"
+            VERSION_FILE="${DEPLOY_DIR}/version-values.yaml"
+
+            # Pull latest changes
+            echo "Pulling latest changes to avoid conflicts..."
+            git pull --rebase origin {{inputs.parameters.branch}} || echo "No changes to pull"
+
+            # Update version-values.yaml
+            echo "Updating ${APP_NAME}-admin version-values.yaml with tag: {{inputs.parameters.docker-tag}}"
+
+            cd ${DEPLOY_DIR} || { echo "Failed to change to ${DEPLOY_DIR} directory"; exit 1; }
+
+            # Update the tag
+            sed -i 's/tag: ".*"/tag: "{{inputs.parameters.docker-tag}}"/' version-values.yaml
+
+            # Verify the change
+            echo "Updated ${APP_NAME}-admin version-values.yaml content:"
+            cat version-values.yaml
+
+            # Commit and push the change
+            cd /workspace
+            git add ${VERSION_FILE}
+            git commit -m "Deploy ${APP_NAME}-admin version {{inputs.parameters.docker-tag}} to Harbor" || { echo "No changes to commit"; exit 0; }
+
+            # Push with retry logic
+            MAX_RETRIES=3
+            RETRY_COUNT=0
+            while [ $RETRY_COUNT -lt $MAX_RETRIES ]; do
+              if git push origin {{inputs.parameters.branch}}; then
+                echo "Successfully pushed ${APP_NAME}-admin version {{inputs.parameters.docker-tag}}"
+                exit 0
+              else
+                echo "Push failed, attempt $((RETRY_COUNT + 1))/$MAX_RETRIES. Pulling and retrying..."
+                git pull --rebase origin {{inputs.parameters.branch}}
+                RETRY_COUNT=$((RETRY_COUNT + 1))
+                sleep 2
+              fi
+            done
+
+            echo "Failed to push after $MAX_RETRIES attempts"
+            exit 1
+        volumeMounts:
+          - name: workspace
+            mountPath: /workspace
+          - name: ssh-key
+            mountPath: /ssh-keys

@@ -1,0 +1,66 @@
+name: iRaven Admin CI/CD
+
+on:
+  push:
+    tags:
+      - 'v*'
+    paths-ignore:
+      - '**.md'
+      - '.deployment/**'
+      - '.github/**'
+      - '.gitignore'
+      - '**/version-values.yaml'
+
+jobs:
+  trigger-argo-event:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
+
+      - name: Extract tag version
+        id: tag-info
+        run: |
+          echo "tag=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
+          echo "version=${GITHUB_REF#refs/tags/v}" >> $GITHUB_OUTPUT
+
+      - name: Get commit info
+        id: commit-info
+        run: |
+          echo "sha=$(git rev-parse HEAD)" >> $GITHUB_OUTPUT
+          echo "short_sha=$(git rev-parse --short HEAD)" >> $GITHUB_OUTPUT
+          # Properly escape commit message and limit length
+          COMMIT_MESSAGE=$(git log -1 --pretty=%B | head -1 | tr -d '\n\r' | sed 's/"/\\"/g' | cut -c1-200)
+          echo "message=${COMMIT_MESSAGE}" >> $GITHUB_OUTPUT
+          echo "author=$(git log -1 --pretty=%an)" >> $GITHUB_OUTPUT
+          echo "email=$(git log -1 --pretty=%ae)" >> $GITHUB_OUTPUT
+
+      - name: Trigger Argo Event
+        run: |
+          curl -X POST https://events.kousha.dev/iraven-admin-webhook \
+            -H "Content-Type: application/json" \
+            -d '{
+              "repository": "git@github.com:koushamad/iraven-admin.git",
+              "tag": "${{ steps.tag-info.outputs.tag }}",
+              "version": "${{ steps.tag-info.outputs.version }}",
+              "commit": "${{ steps.commit-info.outputs.sha }}",
+              "short_commit": "${{ steps.commit-info.outputs.short_sha }}",
+              "commit_message": "${{ steps.commit-info.outputs.message }}",
+              "author": "${{ steps.commit-info.outputs.author }}",
+              "email": "${{ steps.commit-info.outputs.email }}",
+              "event_type": "tag_release",
+              "docker_image": "koushamad/iraven-admin:${{ steps.tag-info.outputs.tag }}"
+            }' \
+            -f -s -S --retry 3 --retry-delay 5 || {
+              echo "Failed to trigger Argo Event webhook"
+              exit 1
+            }
+
+      - name: Print deployment info
+        run: |
+          echo "🚀 Triggered deployment for tag: ${{ steps.tag-info.outputs.tag }}"
+          echo "📦 Docker image: koushamad/iraven-admin:${{ steps.tag-info.outputs.tag }}"
+          echo "💾 Commit: ${{ steps.commit-info.outputs.short_sha }}"
+          echo "🌐 Admin URL: https://admin.iraven.io"

@@ -1,0 +1,107 @@
+# Default values for iraven-admin
+replicaCount: 1
+
+image:
+  repository: harbor.kousha.dev/application-images/iraven-admin
+  tag: latest
+  pullPolicy: IfNotPresent
+
+imagePullSecrets: []
+fullname: "iraven-admin"
+
+serviceAccount:
+  create: true
+  annotations: {}
+  name: ""
+
+podAnnotations: {}
+
+podSecurityContext: {}
+
+securityContext: {}
+
+service:
+  type: ClusterIP
+  port: 8081
+
+resources:
+  limits:
+    cpu: 500m
+    memory: 512Mi
+  requests:
+    cpu: 100m
+    memory: 128Mi
+
+nodeSelector: {}
+
+tolerations: []
+
+affinity: {}
+
+# Application configuration
+config:
+  environment: "production"
+  debug: false
+
+  server:
+    host: "0.0.0.0"
+    port: 8081
+
+  # PostgreSQL Database (same as iraven-api)
+  database:
+    host: "iraven-supabase-postgresql.iraven-supabase.svc.cluster.local"
+    port: 5432
+    database: "postgres"
+    username: "postgres"
+    password: "your-super-secret-postgres-password"
+    sslmode: "disable"
+    max_connections: 25
+    max_idle_connections: 5
+
+  # IRaven API Configuration
+  api:
+    base_url: "https://api.iraven.io"
+    timeout: 30
+
+  # Authentication Configuration (same JWT secret as API)
+  auth:
+    jwt_secret: "change_this_jwt_secret_in_production_min_32_chars"
+    session_duration: 86400  # 24 hours
+
+  # Admin Configuration
+  admin:
+    default_page_size: 20
+    max_page_size: 100
+
+# Ingress configuration
+ingress:
+  enabled: true
+  className: "nginx"
+  annotations:
+    cert-manager.io/cluster-issuer: "letsencrypt-k3s-ha01"
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/force-ssl-redirect: "true"
+  hosts:
+    - host: admin.iraven.io
+      paths:
+        - path: /
+          pathType: Prefix
+  tls:
+    - secretName: iraven-admin-tls-cert
+      hosts:
+        - admin.iraven.io
+
+# Deployment strategy
+strategy:
+  type: RollingUpdate
+  rollingUpdate:
+    maxSurge: 1
+    maxUnavailable: 0
+
+# Horizontal Pod Autoscaling
+autoscaling:
+  enabled: true
+  minReplicas: 2
+  maxReplicas: 5
+  targetCPUUtilizationPercentage: 70
+  targetMemoryUtilizationPercentage: 80

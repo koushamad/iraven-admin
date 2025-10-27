@@ -1,0 +1,101 @@
+# workflows/build-and-deploy-template.yaml
+apiVersion: argoproj.io/v1alpha1
+kind: WorkflowTemplate
+metadata:
+  name: iraven-admin-build-and-deploy
+spec:
+  entrypoint: build-and-deploy
+  volumeClaimTemplates:
+    - metadata:
+        name: workspace
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        resources:
+          requests:
+            storage: 5Gi
+
+  volumes:
+    - name: ssh-key
+      secret:
+        secretName: github-ssh-key
+        defaultMode: 0600
+    - name: docker-config
+      secret:
+        secretName: harbor-registry-secret
+        items:
+          - key: .dockerconfigjson
+            path: config.json
+
+  templates:
+    - name: build-and-deploy
+      inputs:
+        parameters:
+          - name: repository
+          - name: branch
+            default: "main"
+          - name: docker-tag
+          - name: app-name
+            default: "iraven-admin"
+          - name: namespace
+            default: "iraven-admin"
+      steps:
+        - - name: clone
+            templateRef:
+              name: iraven-admin-clone-template
+              template: clone-repo
+            arguments:
+              parameters:
+                - name: repository
+                  value: "{{inputs.parameters.repository}}"
+                - name: branch
+                  value: "{{inputs.parameters.branch}}"
+
+        - - name: build
+            templateRef:
+              name: iraven-admin-build-template
+              template: build-image
+            arguments:
+              parameters:
+                - name: docker-tag
+                  value: "{{inputs.parameters.docker-tag}}"
+                - name: app-name
+                  value: "{{inputs.parameters.app-name}}"
+
+        - - name: push
+            templateRef:
+              name: iraven-admin-push-template
+              template: push-image-tags
+            arguments:
+              parameters:
+                - name: docker-tag
+                  value: "{{inputs.parameters.docker-tag}}"
+                - name: app-name
+                  value: "{{inputs.parameters.app-name}}"
+
+        - - name: update-version
+            templateRef:
+              name: iraven-admin-git-template
+              template: update-version-and-push
+            arguments:
+              parameters:
+                - name: docker-tag
+                  value: "{{inputs.parameters.docker-tag}}"
+                - name: repository
+                  value: "{{inputs.parameters.repository}}"
+                - name: branch
+                  value: "{{inputs.parameters.branch}}"
+                - name: app-name
+                  value: "{{inputs.parameters.app-name}}"
+
+        - - name: wait-deployment
+            templateRef:
+              name: iraven-admin-deployment-template
+              template: wait-for-deployment
+            arguments:
+              parameters:
+                - name: app-name
+                  value: "{{inputs.parameters.app-name}}"
+                - name: namespace
+                  value: "{{inputs.parameters.namespace}}"
+                - name: timeout
+                  value: "300"

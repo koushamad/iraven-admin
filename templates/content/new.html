@@ -1,0 +1,41 @@
+{{template "base" .}}
+
+{{define "content"}}
+<div class="mb-4">
+    <a href="/content" class="btn btn-secondary mb-3">
+        <i class="bi bi-arrow-left"></i> Back to Content
+    </a>
+</div>
+
+<h1 class="mb-4"><i class="bi bi-file-plus"></i> Create New Content</h1>
+
+<div class="card">
+    <div class="card-body">
+        <form method="POST" action="/content">
+            <div class="mb-3">
+                <label for="slug" class="form-label">Slug <span class="text-danger">*</span></label>
+                <input type="text" class="form-control" id="slug" name="slug" required placeholder="my-content-slug">
+                <small class="form-text text-muted">URL-friendly identifier</small>
+            </div>
+
+            <div class="mb-3">
+                <label for="title" class="form-label">Title <span class="text-danger">*</span></label>
+                <input type="text" class="form-control" id="title" name="title" required>
+            </div>
+
+            <div class="mb-3">
+                <label for="data" class="form-label">Data (JSON)</label>
+                <textarea class="form-control font-monospace" id="data" name="data" rows="10" placeholder='{"key": "value"}'></textarea>
+                <small class="form-text text-muted">Optional JSON data for flexible content</small>
+            </div>
+
+            <div class="d-flex gap-2">
+                <button type="submit" class="btn btn-primary">
+                    <i class="bi bi-check-lg"></i> Create Content
+                </button>
+                <a href="/content" class="btn btn-secondary">Cancel</a>
+            </div>
+        </form>
+    </div>
+</div>
+{{end}}

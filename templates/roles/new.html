@@ -1,0 +1,36 @@
+{{template "base" .}}
+
+{{define "content"}}
+<div class="mb-4">
+    <a href="/roles" class="btn btn-secondary mb-3">
+        <i class="bi bi-arrow-left"></i> Back to Roles
+    </a>
+</div>
+
+<h1 class="mb-4"><i class="bi bi-shield-plus"></i> Create New Role</h1>
+
+<div class="card">
+    <div class="card-body">
+        <form method="POST" action="/roles">
+            <div class="mb-3">
+                <label for="name" class="form-label">Name <span class="text-danger">*</span></label>
+                <input type="text" class="form-control" id="name" name="name" required>
+                <small class="form-text text-muted">Unique role identifier (e.g., "moderator", "editor")</small>
+            </div>
+
+            <div class="mb-3">
+                <label for="description" class="form-label">Description</label>
+                <textarea class="form-control" id="description" name="description" rows="3"></textarea>
+                <small class="form-text text-muted">Optional description of the role's purpose</small>
+            </div>
+
+            <div class="d-flex gap-2">
+                <button type="submit" class="btn btn-primary">
+                    <i class="bi bi-check-lg"></i> Create Role
+                </button>
+                <a href="/roles" class="btn btn-secondary">Cancel</a>
+            </div>
+        </form>
+    </div>
+</div>
+{{end}}
