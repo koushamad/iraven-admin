@@ -33,7 +33,7 @@ spec:
             pathType: {{ .pathType }}
             backend:
               service:
-                name: {{ include "iraven-admin.fullname" $ }}
+                name: {{ include "iraven-admin.fullname" $ }}-service
                 port:
                   number: {{ $.Values.service.port }}
           {{- end }}
