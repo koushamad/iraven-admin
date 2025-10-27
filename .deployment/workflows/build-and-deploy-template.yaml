@@ -35,7 +35,7 @@ spec:
             default: "main"
           - name: docker-tag
           - name: app-name
-            default: "iraven-admin"
+            default: "admin"
           - name: namespace
             default: "iraven-admin"
       steps:

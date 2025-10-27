@@ -17,7 +17,7 @@ spec:
           - name: repository
           - name: branch
           - name: app-name
-            default: "iraven"
+            default: "admin"
       container:
         image: harbor.kousha.dev/library/alpine-ci:3.18
         command: ["/bin/bash", "-c"]
