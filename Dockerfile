@@ -15,7 +15,7 @@
 # ==============================================================================
 # STAGE 1: Builder
 # ==============================================================================
-ARG GO_VERSION=1.23
+ARG GO_VERSION=1.24
 FROM harbor.kousha.dev/library/golang:${GO_VERSION}-alpine AS builder
 
 # Set working directory
