@@ -34,7 +34,7 @@ export async function getSession(): Promise<{ email: string } | null> {
 
   if (!session || session.expires_at < Math.floor(Date.now() / 1000)) {
     if (session) db.prepare('DELETE FROM sessions WHERE id=?').run(id)
-    jar.delete(SESSION_COOKIE)
+    // Cookie deletion must happen in a Route Handler/Server Action, not here
     return null
   }
   return { email: session.email }
