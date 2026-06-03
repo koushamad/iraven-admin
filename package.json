@@ -1,0 +1,31 @@
+{
+  "name": "iraven-admin",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev -p 3001",
+    "build": "next build",
+    "start": "next start",
+    "lint": "next lint",
+    "db:seed": "npx tsx lib/db/seed.ts"
+  },
+  "dependencies": {
+    "next": "15.3.3",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0",
+    "iron-session": "^8.0.4",
+    "nodemailer": "^6.10.1",
+    "nanoid": "^5.1.5"
+  },
+  "devDependencies": {
+    "@types/node": "^22",
+    "@types/nodemailer": "^6.4.17",
+    "@types/react": "^19",
+    "@types/react-dom": "^19",
+    "typescript": "^5",
+    "tsx": "^4.19.4",
+    "tailwindcss": "^4",
+    "@tailwindcss/postcss": "^4",
+    "postcss": "^8.5.5"
+  }
+}

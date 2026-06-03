@@ -1,0 +1,48 @@
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: iraven-web-workflow-argocd-binding
+  namespace: argocd
+subjects:
+  - kind: ServiceAccount
+    name: iraven-web-workflow-sa
+    namespace: argo-workflows
+roleRef:
+  kind: Role
+  name: argocd-application-manager
+  apiGroup: rbac.authorization.k8s.io
+---
+# Create cluster-level permissions for the workflow service account
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: iraven-web-workflow-cluster-role
+rules:
+  - apiGroups: [""]
+    resources: ["namespaces", "pods", "services", "configmaps", "secrets", "events", "serviceaccounts", "persistentvolumeclaims"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+  - apiGroups: ["apps"]
+    resources: ["deployments", "replicasets", "statefulsets", "daemonsets"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+  - apiGroups: ["argoproj.io"]
+    resources: ["rollouts", "analysisruns", "experiments", "analysistemplates"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+  - apiGroups: ["networking.k8s.io"]
+    resources: ["ingresses"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+  - apiGroups: ["rbac.authorization.k8s.io"]
+    resources: ["roles", "rolebindings", "clusterroles", "clusterrolebindings"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: iraven-web-workflow-cluster-rolebinding
+subjects:
+  - kind: ServiceAccount
+    name: iraven-web-workflow-sa
+    namespace: argo-workflows
+roleRef:
+  kind: ClusterRole
+  name: iraven-web-workflow-cluster-role
+  apiGroup: rbac.authorization.k8s.io

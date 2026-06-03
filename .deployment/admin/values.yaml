@@ -1,0 +1,104 @@
+fullname: "iraven-admin"
+
+# Image configuration — Harbor registry
+image:
+  repository: harbor-registry.tail02a6d.ts.net/application-images/iraven-admin
+  tag: latest
+  pullPolicy: Always
+
+imagePullSecrets:
+  - name: harbor-registry-secret
+
+app:
+  name: iraven-admin
+  replicas: 1
+  resources:
+    limits:
+      cpu: 300m
+      memory: 512Mi
+      ephemeral-storage: 200Mi
+    requests:
+      cpu: 100m
+      memory: 128Mi
+      ephemeral-storage: 100Mi
+  env:
+    NODE_ENV: production
+    PORT: "8081"
+    DATABASE_PATH: /data/iraven.db
+    APP_URL: https://admin.iraven.io
+    SMTP_FROM: admin@iraven.io
+
+  strategy:
+    type: blueGreen
+    blueGreen:
+      autoPromotionEnabled: true
+      autoPromotionSeconds: 600
+      scaleDownDelaySeconds: 300
+
+config:
+  enabled: true
+  data: {}
+
+# PVC for SQLite DB — admin is the single writer
+persistence:
+  enabled: true
+  storageClass: local-path
+  accessMode: ReadWriteOnce
+  size: 2Gi
+  mountPath: /data
+
+service:
+  type: ClusterIP
+  port: 8081
+  targetPort: 8081
+
+ingress:
+  enabled: true
+  host: "admin.iraven.io"
+  annotations:
+    cert-manager.io/cluster-issuer: "letsencrypt-prod"
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+  tls:
+    enabled: true
+    secretName: iraven-admin-tls
+  preview:
+    enabled: false
+    host: ""
+
+# SMTP — magic-link emails (same Gmail account as web)
+smtp:
+  enabled: true
+  secretPath: platform/smtp-gmail
+
+# Session secret from Vault
+session:
+  enabled: true
+  secretPath: k3s-ha00/iraven/admin/session
+
+logging:
+  enabled: true
+  app: "iraven-admin"
+  component: "admin"
+  logClass: "app"
+  retentionClass: "standard"
+  environment: "production"
+
+metrics:
+  enabled: true
+  port: 9091
+  path: /api/health
+  job: iraven-admin
+  component: admin
+
+# Nightly SQLite → S3 backup (same bucket as web, different prefix)
+backup:
+  enabled: true
+  schedule: "0 2 * * *"
+  image: amazon/aws-cli:latest
+
+s3:
+  enabled: true
+  secretPath: k3s-ha00/iraven/web/s3
+
+argo-rollouts:
+  enabled: true

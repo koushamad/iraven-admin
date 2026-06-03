@@ -1,0 +1,60 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Sensor
+metadata:
+  name: {{ .Values.name }}-sensor
+  namespace: {{ .Values.namespace }}
+spec:
+  template:
+    serviceAccountName: argo-events-sa
+  dependencies:
+    - name: webhook-event
+      eventSourceName: {{ .Values.name }}-github-webhook
+      eventName: {{ .Values.name }}-webhook
+      filters:
+        data:
+          - path: body.ref
+            type: string
+            value:
+              - "refs/tags/v.*"
+  triggers:
+    - template:
+        name: {{ .Values.name }}-log-trigger
+        log:
+          message: "{{ .Values.name }} deployment triggered from webhook"
+    - template:
+        name: {{ .Values.name }}-workflow-trigger
+        k8s:
+          operation: create
+          source:
+            resource:
+              apiVersion: argoproj.io/v1alpha1
+              kind: Workflow
+              metadata:
+                generateName: {{ .Values.name }}-workflow-
+                namespace: argo-workflows
+              spec:
+                serviceAccountName: {{ .Values.name }}-workflow-sa
+                entrypoint: build-and-deploy-dag
+                workflowTemplateRef:
+                  name: {{ .Values.name }}-build-and-deploy-template
+                arguments:
+                  parameters:
+                    - name: repository
+                      value: "git@github.com:{{ .Values.repository }}.git"
+                    - name: branch
+                      value: {{ .Values.branch}}
+                    - name: commit
+                    - name: docker-tag
+                    - name: namespace
+                      value: "{{ .Values.name }}"
+          parameters:
+            # Commit SHA from GitHub webhook (body.after = full commit hash)
+            - src:
+                dependencyName: webhook-event
+                dataKey: body.after
+              dest: spec.arguments.parameters.2.value
+            # Tag ref - workflow templates will strip refs/tags/ prefix using sed
+            - src:
+                dependencyName: webhook-event
+                dataKey: body.ref
+              dest: spec.arguments.parameters.3.value

@@ -1,0 +1,435 @@
+apiVersion: argoproj.io/v1alpha1
+kind: WorkflowTemplate
+metadata:
+  name: iraven-web-build-and-deploy-template
+spec:
+  entrypoint: build-and-deploy-dag
+  onExit: cleanup-workspace
+  arguments:
+    parameters:
+      - name: repository
+        value: "git@github.com:iRavenIO/iRaven-Web.git"
+      - name: branch
+        value: "master"
+      - name: commit
+        value: ""
+      - name: docker-tag
+        value: "latest"
+      - name: namespace
+        value: "iraven-web"
+  templates:
+    - name: build-and-deploy-dag
+      dag:
+        tasks:
+          - name: clone-image-amd64
+            templateRef: { name: remote-ha00-execute, template: dispatch }
+            arguments:
+              parameters:
+                - { name: job-namespace, value: "argo-workflows" }
+                - { name: workspace-pvc-name, value: "{{workflow.name}}-ha00-amd64-workspace" }
+                - { name: workspace-pvc-size, value: "6Gi" }
+                - { name: workspace-pvc-access-mode, value: "ReadWriteOnce" }
+                - { name: workspace-pvc-storage-class, value: "local-path" }
+                - name: job-manifest
+                  value: |
+                    apiVersion: batch/v1
+                    kind: Job
+                    metadata:
+                      generateName: iraven-web-amd64-clone-
+                      namespace: argo-workflows
+                    spec:
+                      backoffLimit: 0
+                      ttlSecondsAfterFinished: 600
+                      template:
+                        spec:
+                          automountServiceAccountToken: false
+                          restartPolicy: Never
+                          containers:
+                            - name: clone-amd64
+                              image: harbor-registry.tail02a6d.ts.net/library/docker:20.10.16-dind
+                              command: ["sh","-c"]
+                              args:
+                                - |
+                                  set -e
+                                  apk add --no-cache git >/dev/null
+                                  TOKEN=$(cat /etc/github-token/token)
+                                  REPO=https://x-access-token:${TOKEN}@github.com/iRavenIO/iRaven-Web.git
+                                  rm -rf /workspace/source
+                                  git clone --depth 1 -b "{{workflow.parameters.branch}}" "$REPO" /workspace/source
+                                  echo CLONE_OK
+                              volumeMounts:
+                                - { name: github-token, mountPath: /etc/github-token, readOnly: true }
+                                - { name: workspace, mountPath: /workspace }
+                          volumes:
+                            - name: github-token
+                              secret: { secretName: github-token }
+                            - name: workspace
+                              persistentVolumeClaim: { claimName: {{workflow.name}}-ha00-amd64-workspace }
+          - name: build-image-amd64
+            templateRef: { name: remote-ha00-execute, template: dispatch }
+            dependencies: ["clone-image-amd64"]
+            arguments:
+              parameters:
+                - { name: job-namespace, value: "argo-workflows" }
+                - { name: workspace-pvc-name, value: "{{workflow.name}}-ha00-amd64-workspace" }
+                - { name: workspace-pvc-size, value: "6Gi" }
+                - { name: workspace-pvc-access-mode, value: "ReadWriteOnce" }
+                - { name: workspace-pvc-storage-class, value: "local-path" }
+                - name: job-manifest
+                  value: |
+                    apiVersion: batch/v1
+                    kind: Job
+                    metadata:
+                      generateName: iraven-web-amd64-build-
+                      namespace: argo-workflows
+                    spec:
+                      backoffLimit: 0
+                      ttlSecondsAfterFinished: 600
+                      template:
+                        spec:
+                          automountServiceAccountToken: false
+                          restartPolicy: Never
+                          containers:
+                            - name: build-amd64
+                              image: harbor-registry.tail02a6d.ts.net/library/docker:20.10.16-dind
+                              command: ["sh","-c"]
+                              args:
+                                - |
+                                  set -e
+                                  echo "192.168.2.30 harbor-registry.tail02a6d.ts.net" >> /etc/hosts
+                                  echo "192.168.2.30 harbor.tail02a6d.ts.net" >> /etc/hosts
+                                  iptables -t nat -A OUTPUT -p tcp -d 192.168.2.30 --dport 443 -j DNAT --to-destination 192.168.2.30:30443 || true
+                                  mkdir -p /etc/docker && echo '{"insecure-registries":["harbor-registry.tail02a6d.ts.net","harbor.tail02a6d.ts.net"],"mtu":1400}' > /etc/docker/daemon.json
+                                  dockerd-entrypoint.sh &
+                                  for i in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15; do sleep 2; docker info >/dev/null 2>&1 && break; done
+                                  docker info >/dev/null || { echo "ERROR: dockerd never became ready"; exit 1; }
+                                  echo "$HARBOR_PASSWORD" | docker login harbor-registry.tail02a6d.ts.net -u "$HARBOR_USERNAME" --password-stdin
+                                  cd /workspace/source
+                                  DOCKER_TAG={{workflow.parameters.docker-tag}}
+                                  DOCKER_TAG=$(echo "$DOCKER_TAG" | sed 's|refs/tags/||; s|refs/heads/||')
+                                  docker build --no-cache \
+                                    --build-arg NODE_IMAGE=harbor-registry.tail02a6d.ts.net/library/node:22-alpine \
+                                    -t harbor-registry.tail02a6d.ts.net/application-images/iraven-web:${DOCKER_TAG}-amd64 .
+                                  docker save harbor-registry.tail02a6d.ts.net/application-images/iraven-web:${DOCKER_TAG}-amd64 -o /workspace/iraven-web-${DOCKER_TAG}-amd64.tar
+                              env:
+                                - { name: DOCKER_TLS_CERTDIR, value: "" }
+                                - name: HARBOR_USERNAME
+                                  valueFrom: { secretKeyRef: { name: harbor-credentials, key: username } }
+                                - name: HARBOR_PASSWORD
+                                  valueFrom: { secretKeyRef: { name: harbor-credentials, key: password } }
+                              securityContext: { privileged: true }
+                              volumeMounts:
+                                - { name: workspace, mountPath: /workspace }
+                          volumes:
+                            - name: workspace
+                              persistentVolumeClaim: { claimName: {{workflow.name}}-ha00-amd64-workspace }
+          - name: push-image-amd64
+            templateRef: { name: remote-ha00-execute, template: dispatch }
+            dependencies: ["build-image-amd64"]
+            arguments:
+              parameters:
+                - { name: job-namespace, value: "argo-workflows" }
+                - { name: workspace-pvc-name, value: "{{workflow.name}}-ha00-amd64-workspace" }
+                - { name: workspace-pvc-size, value: "6Gi" }
+                - { name: workspace-pvc-access-mode, value: "ReadWriteOnce" }
+                - { name: workspace-pvc-storage-class, value: "local-path" }
+                - { name: delete-workspace-pvc, value: "false" }
+                - name: job-manifest
+                  value: |
+                    apiVersion: batch/v1
+                    kind: Job
+                    metadata:
+                      generateName: iraven-web-amd64-push-
+                      namespace: argo-workflows
+                    spec:
+                      backoffLimit: 0
+                      ttlSecondsAfterFinished: 600
+                      template:
+                        spec:
+                          automountServiceAccountToken: false
+                          restartPolicy: Never
+                          containers:
+                            - name: push-amd64
+                              image: harbor-registry.tail02a6d.ts.net/library/docker:20.10.16-dind
+                              command: ["sh","-c"]
+                              args:
+                                - |
+                                  set -e
+                                  echo "192.168.2.30 harbor-registry.tail02a6d.ts.net" >> /etc/hosts
+                                  echo "192.168.2.30 harbor.tail02a6d.ts.net" >> /etc/hosts
+                                  iptables -t nat -A OUTPUT -p tcp -d 192.168.2.30 --dport 443 -j DNAT --to-destination 192.168.2.30:30443 || true
+                                  mkdir -p /etc/docker && echo '{"insecure-registries":["harbor-registry.tail02a6d.ts.net","harbor.tail02a6d.ts.net"],"mtu":1400}' > /etc/docker/daemon.json
+                                  dockerd-entrypoint.sh &
+                                  for i in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15; do sleep 2; docker info >/dev/null 2>&1 && break; done
+                                  docker info >/dev/null || { echo "ERROR: dockerd never became ready"; exit 1; }
+                                  DOCKER_TAG={{workflow.parameters.docker-tag}}
+                                  DOCKER_TAG=$(echo "$DOCKER_TAG" | sed 's|refs/tags/||; s|refs/heads/||')
+                                  docker load -i /workspace/iraven-web-${DOCKER_TAG}-amd64.tar
+                                  echo "$HARBOR_PASSWORD" | docker login harbor-registry.tail02a6d.ts.net -u $HARBOR_USERNAME --password-stdin
+                                  docker tag harbor-registry.tail02a6d.ts.net/application-images/iraven-web:${DOCKER_TAG}-amd64 harbor-registry.tail02a6d.ts.net/application-images/iraven-web:${DOCKER_TAG}-amd64
+                                  docker push harbor-registry.tail02a6d.ts.net/application-images/iraven-web:${DOCKER_TAG}-amd64
+                              env:
+                                - { name: DOCKER_TLS_CERTDIR, value: "" }
+                                - name: HARBOR_USERNAME
+                                  valueFrom: { secretKeyRef: { name: harbor-credentials, key: username } }
+                                - name: HARBOR_PASSWORD
+                                  valueFrom: { secretKeyRef: { name: harbor-credentials, key: password } }
+                              securityContext: { privileged: true }
+                              volumeMounts:
+                                - { name: workspace, mountPath: /workspace }
+                          volumes:
+                            - name: workspace
+                              persistentVolumeClaim: { claimName: {{workflow.name}}-ha00-amd64-workspace }
+          - name: clone-image-arm64
+            templateRef: { name: remote-pi-job-execute, template: dispatch }
+            arguments:
+              parameters:
+                - { name: job-namespace, value: "argo-workflows" }
+                - { name: workspace-pvc-name, value: "{{workflow.name}}-pi-arm64-workspace" }
+                - { name: workspace-pvc-size, value: "6Gi" }
+                - name: job-manifest
+                  value: |
+                    apiVersion: batch/v1
+                    kind: Job
+                    metadata:
+                      generateName: iraven-web-arm64-clone-
+                      namespace: argo-workflows
+                    spec:
+                      backoffLimit: 0
+                      ttlSecondsAfterFinished: 600
+                      template:
+                        spec:
+                          automountServiceAccountToken: false
+                          restartPolicy: Never
+                          containers:
+                            - name: clone-arm64
+                              image: harbor-registry.tail02a6d.ts.net/library/docker:24-dind-arm64
+                              command: ["sh","-c"]
+                              args:
+                                - |
+                                  set -e
+                                  apk add --no-cache git >/dev/null
+                                  TOKEN=$(cat /etc/github-token/token)
+                                  REPO=https://x-access-token:${TOKEN}@github.com/iRavenIO/iRaven-Web.git
+                                  rm -rf /workspace/source
+                                  git clone --depth 1 -b "{{workflow.parameters.branch}}" "$REPO" /workspace/source
+                                  echo CLONE_OK
+                              volumeMounts:
+                                - { name: github-token, mountPath: /etc/github-token, readOnly: true }
+                                - { name: workspace, mountPath: /workspace }
+                          volumes:
+                            - name: github-token
+                              secret: { secretName: github-token }
+                            - name: workspace
+                              persistentVolumeClaim: { claimName: {{workflow.name}}-pi-arm64-workspace }
+                - { name: timeout-seconds, value: "3600" }
+          - name: build-image-arm64
+            templateRef: { name: remote-pi-job-execute, template: dispatch }
+            dependencies: ["clone-image-arm64"]
+            arguments:
+              parameters:
+                - { name: job-namespace, value: "argo-workflows" }
+                - { name: workspace-pvc-name, value: "{{workflow.name}}-pi-arm64-workspace" }
+                - { name: workspace-pvc-size, value: "6Gi" }
+                - name: job-manifest
+                  value: |
+                    apiVersion: batch/v1
+                    kind: Job
+                    metadata:
+                      generateName: iraven-web-arm64-build-
+                      namespace: argo-workflows
+                    spec:
+                      backoffLimit: 0
+                      ttlSecondsAfterFinished: 600
+                      template:
+                        spec:
+                          automountServiceAccountToken: false
+                          restartPolicy: Never
+                          containers:
+                            - name: build-arm64
+                              image: harbor-registry.tail02a6d.ts.net/library/docker:24-dind-arm64
+                              command: ["sh","-c"]
+                              args:
+                                - |
+                                  set -e
+                                  echo "192.168.2.30 harbor-registry.tail02a6d.ts.net" >> /etc/hosts
+                                  echo "192.168.2.30 harbor.tail02a6d.ts.net" >> /etc/hosts
+                                  iptables -t nat -A OUTPUT -p tcp -d 192.168.2.30 --dport 443 -j DNAT --to-destination 192.168.2.30:30443 || true
+                                  mkdir -p /etc/docker && echo '{"insecure-registries":["harbor-registry.tail02a6d.ts.net","harbor.tail02a6d.ts.net"],"mtu":1400}' > /etc/docker/daemon.json
+                                  dockerd-entrypoint.sh &
+                                  for i in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15; do sleep 2; docker info >/dev/null 2>&1 && break; done
+                                  docker info >/dev/null || { echo "ERROR: dockerd never became ready"; exit 1; }
+                                  echo "$HARBOR_PASSWORD" | docker login harbor-registry.tail02a6d.ts.net -u "$HARBOR_USERNAME" --password-stdin
+                                  echo "$DOCKERHUB_PASSWORD" | docker login docker.io -u "$DOCKERHUB_USERNAME" --password-stdin
+                                  cd /workspace/source
+                                  DOCKER_TAG={{workflow.parameters.docker-tag}}
+                                  DOCKER_TAG=$(echo "$DOCKER_TAG" | sed 's|refs/tags/||; s|refs/heads/||')
+                                  docker build --no-cache \
+                                    --build-arg NODE_IMAGE=node:22-alpine \
+                                    -t harbor-registry.tail02a6d.ts.net/application-images/iraven-web:${DOCKER_TAG}-arm64 .
+                                  docker save harbor-registry.tail02a6d.ts.net/application-images/iraven-web:${DOCKER_TAG}-arm64 -o /workspace/iraven-web-${DOCKER_TAG}-arm64.tar
+                              env:
+                                - { name: DOCKER_TLS_CERTDIR, value: "" }
+                                - name: HARBOR_USERNAME
+                                  valueFrom: { secretKeyRef: { name: harbor-credentials, key: username } }
+                                - name: HARBOR_PASSWORD
+                                  valueFrom: { secretKeyRef: { name: harbor-credentials, key: password } }
+                                - name: DOCKERHUB_USERNAME
+                                  valueFrom: { secretKeyRef: { name: docker-hub-credentials, key: username } }
+                                - name: DOCKERHUB_PASSWORD
+                                  valueFrom: { secretKeyRef: { name: docker-hub-credentials, key: password } }
+                              securityContext: { privileged: true }
+                              volumeMounts:
+                                - { name: workspace, mountPath: /workspace }
+                          volumes:
+                            - name: workspace
+                              persistentVolumeClaim: { claimName: {{workflow.name}}-pi-arm64-workspace }
+                - { name: timeout-seconds, value: "3600" }
+          - name: push-image-arm64
+            templateRef: { name: remote-pi-job-execute, template: dispatch }
+            dependencies: ["build-image-arm64"]
+            arguments:
+              parameters:
+                - { name: job-namespace, value: "argo-workflows" }
+                - { name: workspace-pvc-name, value: "{{workflow.name}}-pi-arm64-workspace" }
+                - { name: workspace-pvc-size, value: "6Gi" }
+                - name: job-manifest
+                  value: |
+                    apiVersion: batch/v1
+                    kind: Job
+                    metadata:
+                      generateName: iraven-web-arm64-push-
+                      namespace: argo-workflows
+                    spec:
+                      backoffLimit: 0
+                      ttlSecondsAfterFinished: 600
+                      template:
+                        spec:
+                          automountServiceAccountToken: false
+                          restartPolicy: Never
+                          containers:
+                            - name: push-arm64
+                              image: harbor-registry.tail02a6d.ts.net/library/docker:24-dind-arm64
+                              command: ["sh","-c"]
+                              args:
+                                - |
+                                  set -e
+                                  echo "192.168.2.30 harbor-registry.tail02a6d.ts.net" >> /etc/hosts
+                                  echo "192.168.2.30 harbor.tail02a6d.ts.net" >> /etc/hosts
+                                  iptables -t nat -A OUTPUT -p tcp -d 192.168.2.30 --dport 443 -j DNAT --to-destination 192.168.2.30:30443 || true
+                                  mkdir -p /etc/docker && echo '{"insecure-registries":["harbor-registry.tail02a6d.ts.net","harbor.tail02a6d.ts.net"],"mtu":1400}' > /etc/docker/daemon.json
+                                  dockerd-entrypoint.sh &
+                                  for i in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15; do sleep 2; docker info >/dev/null 2>&1 && break; done
+                                  docker info >/dev/null || { echo "ERROR: dockerd never became ready"; exit 1; }
+                                  DOCKER_TAG={{workflow.parameters.docker-tag}}
+                                  DOCKER_TAG=$(echo "$DOCKER_TAG" | sed 's|refs/tags/||; s|refs/heads/||')
+                                  docker load -i /workspace/iraven-web-${DOCKER_TAG}-arm64.tar
+                                  echo "$HARBOR_PASSWORD" | docker login harbor-registry.tail02a6d.ts.net -u $HARBOR_USERNAME --password-stdin
+                                  docker tag harbor-registry.tail02a6d.ts.net/application-images/iraven-web:${DOCKER_TAG}-arm64 harbor-registry.tail02a6d.ts.net/application-images/iraven-web:${DOCKER_TAG}-arm64
+                                  docker push harbor-registry.tail02a6d.ts.net/application-images/iraven-web:${DOCKER_TAG}-arm64
+                              env:
+                                - { name: DOCKER_TLS_CERTDIR, value: "" }
+                                - name: HARBOR_USERNAME
+                                  valueFrom: { secretKeyRef: { name: harbor-credentials, key: username } }
+                                - name: HARBOR_PASSWORD
+                                  valueFrom: { secretKeyRef: { name: harbor-credentials, key: password } }
+                              securityContext: { privileged: true }
+                              volumeMounts:
+                                - { name: workspace, mountPath: /workspace }
+                          volumes:
+                            - name: workspace
+                              persistentVolumeClaim: { claimName: {{workflow.name}}-pi-arm64-workspace }
+                - { name: timeout-seconds, value: "3600" }
+          - name: create-manifest-list
+            templateRef: { name: iraven-web-build-template, template: create-manifest-list }
+            dependencies: ["push-image-amd64", "push-image-arm64"]
+            arguments:
+              parameters:
+                - { name: docker-tag, value: "{{workflow.parameters.docker-tag}}" }
+          - name: update-version-file
+            templateRef: { name: iraven-web-git-template, template: update-version-and-push }
+            dependencies: ["create-manifest-list"]
+            arguments:
+              parameters:
+                - { name: docker-tag, value: "{{workflow.parameters.docker-tag}}" }
+                - { name: repository, value: "{{workflow.parameters.repository}}" }
+                - { name: branch, value: "{{workflow.parameters.branch}}" }
+
+    - name: cleanup-workspace
+      steps:
+        - - name: cleanup-workspace-amd64
+            templateRef: { name: remote-ha00-execute, template: dispatch }
+            arguments:
+              parameters:
+                - { name: job-namespace, value: "argo-workflows" }
+                - { name: workspace-pvc-name, value: "{{workflow.name}}-ha00-amd64-workspace" }
+                - { name: workspace-pvc-size, value: "6Gi" }
+                - { name: workspace-pvc-access-mode, value: "ReadWriteOnce" }
+                - { name: workspace-pvc-storage-class, value: "local-path" }
+                - { name: delete-workspace-pvc, value: "true" }
+                - name: job-manifest
+                  value: |
+                    apiVersion: batch/v1
+                    kind: Job
+                    metadata:
+                      generateName: iraven-web-amd64-cleanup-
+                      namespace: argo-workflows
+                    spec:
+                      backoffLimit: 0
+                      ttlSecondsAfterFinished: 300
+                      template:
+                        spec:
+                          automountServiceAccountToken: false
+                          restartPolicy: Never
+                          containers:
+                            - name: cleanup-amd64
+                              image: harbor-registry.tail02a6d.ts.net/library/alpine-ci:3.18
+                              command: ["sh","-c"]
+                              args:
+                                - |
+                                  set -e
+                                  rm -rf /workspace/* /workspace/.[!.]* /workspace/..?* 2>/dev/null || true
+                                  mkdir -p /workspace
+                                  echo CLEANUP_OK
+                              volumeMounts:
+                                - { name: workspace, mountPath: /workspace }
+                          volumes:
+                            - name: workspace
+                              persistentVolumeClaim: { claimName: {{workflow.name}}-ha00-amd64-workspace }
+          - name: cleanup-workspace-arm64
+            templateRef: { name: remote-pi-job-execute, template: dispatch }
+            arguments:
+              parameters:
+                - { name: job-namespace, value: "argo-workflows" }
+                - { name: workspace-pvc-name, value: "{{workflow.name}}-pi-arm64-workspace" }
+                - { name: workspace-pvc-size, value: "6Gi" }
+                - name: job-manifest
+                  value: |
+                    apiVersion: batch/v1
+                    kind: Job
+                    metadata:
+                      generateName: iraven-web-arm64-cleanup-
+                      namespace: argo-workflows
+                    spec:
+                      backoffLimit: 0
+                      ttlSecondsAfterFinished: 300
+                      template:
+                        spec:
+                          automountServiceAccountToken: false
+                          restartPolicy: Never
+                          containers:
+                            - name: cleanup-arm64
+                              image: harbor-registry.tail02a6d.ts.net/library/docker:24-dind-arm64
+                              command: ["sh","-c"]
+                              args:
+                                - |
+                                  set -e
+                                  rm -rf /workspace/* /workspace/.[!.]* /workspace/..?* 2>/dev/null || true
+                                  mkdir -p /workspace
+                                  echo CLEANUP_OK
+                              volumeMounts:
+                                - { name: workspace, mountPath: /workspace }
+                          volumes:
+                            - name: workspace
+                              persistentVolumeClaim: { claimName: {{workflow.name}}-pi-arm64-workspace }
+                - { name: timeout-seconds, value: "900" }

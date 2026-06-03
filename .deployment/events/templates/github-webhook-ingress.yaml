@@ -1,0 +1,39 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: {{ .Values.name }}-github-webhook-ingress
+  namespace: {{ .Values.namespace }}
+  annotations:
+    cert-manager.io/issuer: letsencrypt-{{ .Values.clusterName }}
+    kubernetes.io/ingress.class: nginx
+    nginx.ingress.kubernetes.io/proxy-body-size: "20m"
+    nginx.ingress.kubernetes.io/client-body-buffer-size: "20m"
+spec:
+  tls:
+    - hosts:
+        - events.iraven.io
+      secretName: events-iraven-io-tls
+    - hosts:
+        - events.kousha.dev
+      secretName: events-tls-cert
+  rules:
+    - host: events.iraven.io
+      http:
+        paths:
+          - path: "/{{ .Values.webhook }}"
+            pathType: Prefix
+            backend:
+              service:
+                name: {{ .Values.name }}-github-webhook-eventsource-svc
+                port:
+                  number: 12000
+    - host: events.kousha.dev
+      http:
+        paths:
+          - path: "/{{ .Values.webhook }}"
+            pathType: Prefix
+            backend:
+              service:
+                name: {{ .Values.name }}-github-webhook-eventsource-svc
+                port:
+                  number: 12000

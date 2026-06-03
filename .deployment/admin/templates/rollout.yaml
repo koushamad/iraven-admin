@@ -1,0 +1,107 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Rollout
+metadata:
+  name: {{ include "iraven-admin.fullname" . }}
+  labels:
+    {{- include "iraven-admin.labels" . | nindent 4 }}
+  annotations:
+    meta.helm.sh/release-name: {{ .Release.Name }}
+    meta.helm.sh/release-namespace: {{ .Release.Namespace }}
+spec:
+  replicas: {{ .Values.app.replicas }}
+  revisionHistoryLimit: 3
+  selector:
+    matchLabels:
+      {{- include "iraven-admin.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      annotations:
+        {{- if and .Values.logging .Values.logging.enabled }}
+        logging.chance.io/enabled: "true"
+        logging.chance.io/app: {{ .Values.logging.app | default "iraven-admin" | quote }}
+        logging.chance.io/component: {{ .Values.logging.component | default "admin" | quote }}
+        logging.chance.io/log-class: {{ .Values.logging.logClass | default "app" | quote }}
+        logging.chance.io/retention-class: {{ .Values.logging.retentionClass | default "standard" | quote }}
+        logging.chance.io/environment: {{ .Values.logging.environment | default "production" | quote }}
+        {{- end }}
+        {{- if and .Values.metrics .Values.metrics.enabled }}
+        metrics.chance.io/enabled: "true"
+        metrics.chance.io/port: {{ .Values.metrics.port | default 9091 | quote }}
+        metrics.chance.io/path: {{ .Values.metrics.path | default "/api/health" | quote }}
+        metrics.chance.io/job: {{ .Values.metrics.job | default "iraven-admin" | quote }}
+        metrics.chance.io/component: {{ .Values.metrics.component | default "admin" | quote }}
+        {{- end }}
+      labels:
+        {{- include "iraven-admin.selectorLabels" . | nindent 8 }}
+    spec:
+      {{- if .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml .Values.imagePullSecrets | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: {{ .Values.app.name }}
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          ports:
+            - name: http
+              containerPort: {{ .Values.service.port }}
+              protocol: TCP
+          envFrom:
+            - secretRef:
+                name: {{ include "iraven-admin.fullname" . }}
+                optional: true
+          env:
+            {{- range $key, $value := .Values.app.env }}
+            - name: {{ $key }}
+              value: {{ $value | quote }}
+            {{- end }}
+          volumeMounts:
+            {{- if and .Values.persistence .Values.persistence.enabled }}
+            - name: db-data
+              mountPath: {{ .Values.persistence.mountPath | default "/data" }}
+            {{- end }}
+          resources:
+            {{- toYaml .Values.app.resources | nindent 12 }}
+          livenessProbe:
+            httpGet:
+              path: /api/health
+              port: http
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /api/health
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 5
+            timeoutSeconds: 3
+            failureThreshold: 3
+          securityContext:
+            allowPrivilegeEscalation: false
+            runAsNonRoot: true
+            runAsUser: 1001
+            runAsGroup: 1001
+            capabilities:
+              drop:
+                - ALL
+      volumes:
+        {{- if and .Values.persistence .Values.persistence.enabled }}
+        - name: db-data
+          persistentVolumeClaim:
+            claimName: {{ include "iraven-admin.fullname" . }}-db
+        {{- end }}
+      securityContext:
+        fsGroup: 1001
+      restartPolicy: Always
+
+  {{- if eq .Values.app.strategy.type "blueGreen" }}
+  strategy:
+    blueGreen:
+      activeService: {{ include "iraven-admin.fullname" . }}
+      previewService: {{ include "iraven-admin.fullname" . }}-preview
+      autoPromotionEnabled: {{ .Values.app.strategy.blueGreen.autoPromotionEnabled }}
+      autoPromotionSeconds: {{ .Values.app.strategy.blueGreen.autoPromotionSeconds }}
+      scaleDownDelaySeconds: {{ .Values.app.strategy.blueGreen.scaleDownDelaySeconds }}
+  {{- end }}

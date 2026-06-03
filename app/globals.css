@@ -1,0 +1,111 @@
+@import "tailwindcss";
+
+/* ── Design tokens — RavenOS ────────────────────────────────────────────────── */
+:root {
+  /* Surfaces */
+  --bg:          #050710;
+  --bg-2:        #080b16;
+  --panel:       #0b0f1d;
+  --midnight:    #121331;
+  --line:        rgba(150,170,220,0.10);
+  --line-strong: rgba(150,170,220,0.18);
+
+  /* Text */
+  --ink:      #eef2fb;
+  --ink-soft: #c0c8da;
+  --muted:    #8b95ac;
+  --faint:    #5c6680;
+
+  /* Brand accents */
+  --cyan:        #4be1ec;
+  --cyan-deep:   #28b8d8;
+  --violet:      #9a57e8;
+  --violet-deep: #9a57e8;
+  --teal:        #08a88a;
+  --gold:        #d9b25f;
+  --bridge:      #7db8f0;
+
+  /* Typography */
+  --font-display: 'Space Grotesk', ui-sans-serif, system-ui, 'Segoe UI', Helvetica, Arial, sans-serif;
+  --font-body:    'Hanken Grotesk', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+  --font-mono:    'Space Grotesk', ui-monospace, monospace;
+
+  /* Radius */
+  --r-sm:   12px;
+  --r:      18px;
+  --r-lg:   26px;
+  --r-pill: 100px;
+
+  /* Layout */
+  --maxw:   1240px;
+  --gut:    clamp(20px, 5vw, 64px);
+  --band-y: clamp(84px, 12vh, 150px);
+
+  /* Motion */
+  --ease:        cubic-bezier(0.22, 1, 0.36, 1);
+  --ease-in-out: cubic-bezier(0.65, 0, 0.35, 1);
+  --dur-fast:    0.25s;
+  --dur:         0.4s;
+  --dur-slow:    0.9s;
+
+  /* Glows / shadows */
+  --glow-cyan:   0 18px 60px -22px rgba(75,225,236,0.45);
+  --glow-violet: 0 18px 60px -22px rgba(203,94,238,0.45);
+  --shadow-card: 0 30px 70px -36px rgba(0,0,0,0.6);
+}
+
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+html { scroll-behavior: smooth; }
+body {
+  background: var(--bg);
+  color: var(--ink);
+  font-family: var(--font-body);
+  font-size: 17px;
+  line-height: 1.6;
+  -webkit-font-smoothing: antialiased;
+  overflow-x: hidden;
+}
+::selection { background: rgba(75,225,236,0.28); color: #fff; }
+:focus-visible { outline: 2px solid var(--cyan); outline-offset: 3px; border-radius: 6px; }
+a { color: inherit; text-decoration: none; }
+img, svg { display: block; }
+
+/* ── Layout ─────────────────────────────────────────────────────────────────── */
+.wrap { max-width: var(--maxw); margin-inline: auto; padding-inline: var(--gut); }
+
+/* ── Keyframes ──────────────────────────────────────────────────────────────── */
+@keyframes spin  { to { transform: rotate(360deg); } }
+@keyframes spinr { to { transform: rotate(-360deg); } }
+@keyframes breathe {
+  0%,100% { transform: scale(1); opacity: .8; }
+  50%      { transform: scale(1.08); opacity: 1; }
+}
+@keyframes fadeUp {
+  from { opacity: 0; transform: translateY(24px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+@keyframes blink { 50% { opacity: 0; } }
+
+/* ── Ambient background layers ─────────────────────────────────────────────── */
+.ambient {
+  position: fixed; inset: 0; z-index: 0; pointer-events: none;
+  background:
+    radial-gradient(900px 600px at 78% -5%,  rgba(203,94,238,0.16), transparent 60%),
+    radial-gradient(820px 560px at 12% 8%,   rgba(75,225,236,0.14), transparent 58%),
+    radial-gradient(1200px 900px at 50% 120%, rgba(154,87,232,0.10), transparent 60%);
+}
+.grain {
+  position: fixed; inset: 0; z-index: 0; pointer-events: none; opacity: 0.035;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='120'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  mix-blend-mode: overlay;
+}
+.site-grid {
+  position: fixed; inset: 0; z-index: 0; pointer-events: none; opacity: 0.5;
+  background-image:
+    linear-gradient(var(--line) 1px, transparent 1px),
+    linear-gradient(90deg, var(--line) 1px, transparent 1px);
+  background-size: 40px 40px;
+}
+@media (prefers-reduced-motion: reduce) {
+  .ambient::before, .ambient::after { animation: none; }
+}
