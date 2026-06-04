@@ -1,5 +1,5 @@
 namespace: argo-events
 name: iraven-admin
 webhook: iraven-admin-webhook
-repository: iRavenIO/iRaven-Admin
-branch: "master"
+repository: koushamad/iraven-admin
+branch: "main"

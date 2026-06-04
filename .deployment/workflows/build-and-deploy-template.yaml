@@ -8,7 +8,7 @@ spec:
   arguments:
     parameters:
       - name: repository
-        value: "git@github.com:iRavenIO/iRaven-Admin.git"
+        value: "git@github.com:koushamad/iraven-admin.git"
       - name: branch
         value: "master"
       - name: commit
@@ -53,7 +53,7 @@ spec:
                                   set -e
                                   apk add --no-cache git >/dev/null
                                   TOKEN=$(cat /etc/github-token/token)
-                                  REPO=https://x-access-token:${TOKEN}@github.com/iRavenIO/iRaven-Admin.git
+                                  REPO=https://x-access-token:${TOKEN}@github.com/koushamad/iraven-admin.git
                                   rm -rf /workspace/source
                                   git clone --depth 1 -b "{{workflow.parameters.branch}}" "$REPO" /workspace/source
                                   echo CLONE_OK
@@ -210,7 +210,7 @@ spec:
                                   set -e
                                   apk add --no-cache git >/dev/null
                                   TOKEN=$(cat /etc/github-token/token)
-                                  REPO=https://x-access-token:${TOKEN}@github.com/iRavenIO/iRaven-Admin.git
+                                  REPO=https://x-access-token:${TOKEN}@github.com/koushamad/iraven-admin.git
                                   rm -rf /workspace/source
                                   git clone --depth 1 -b "{{workflow.parameters.branch}}" "$REPO" /workspace/source
                                   echo CLONE_OK
