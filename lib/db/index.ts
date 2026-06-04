@@ -1,8 +1,6 @@
-// Re-exports for backward compatibility.
-// Content routes use getDb() → web.db
-// Auth routes use getAdminDb() → admin.db
 export { getWebDb as getDb } from './web-db'
 export { getAdminDb } from './admin-db'
+export { getWorkspaceDb } from './workspace-db'
 
 export type Product = {
   id: number; key: string; name: string; initial: string; orbit: number

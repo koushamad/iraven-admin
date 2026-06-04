@@ -1,10 +1,10 @@
-import { getDb } from '@/lib/db'
+import { getAdminDb } from '@/lib/db'
 import AdminsEditor from '@/components/admin/AdminsEditor'
 import AdminShell from '@/components/admin/AdminShell'
 
 export default function AdminsPage() {
-  const db = getDb()
-  const admins = (db.prepare('SELECT * FROM admins ORDER BY id').all() as {
+  const db = getAdminDb()
+  const admins = (db.prepare('SELECT * FROM admin_users ORDER BY id').all() as {
     id: number; email: string; created_at: number
   }[]).map(r => ({ ...r }))
 

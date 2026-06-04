@@ -1,0 +1,135 @@
+apiVersion: argoproj.io/v1alpha1
+kind: WorkflowTemplate
+metadata:
+  name: workspace-provision
+  namespace: argo-workflows
+spec:
+  entrypoint: provision
+  arguments:
+    parameters:
+      - name: slug
+      - name: email
+      - name: full_name
+      - name: products   # comma-separated list, e.g. "playground,media,ai"
+
+  volumes:
+    # hostPath must match the directory that iRaven-Workspace mounts as WORKSPACE_DB_DIR.
+    # In production: /data/iraven/admin/db/workspace (the db/workspace/ subdirectory of admin's data volume).
+    - name: workspace-db
+      hostPath:
+        path: /data/iraven/admin/db/workspace
+        type: DirectoryOrCreate
+
+  templates:
+    - name: provision
+      steps:
+        - - name: create-partner-db
+            template: create-partner-db
+            arguments:
+              parameters:
+                - name: slug
+                  value: "{{workflow.parameters.slug}}"
+                - name: email
+                  value: "{{workflow.parameters.email}}"
+                - name: full_name
+                  value: "{{workflow.parameters.full_name}}"
+                - name: products
+                  value: "{{workflow.parameters.products}}"
+        - - name: notify-admin
+            template: notify-admin
+            arguments:
+              parameters:
+                - name: slug
+                  value: "{{workflow.parameters.slug}}"
+
+    - name: create-partner-db
+      inputs:
+        parameters:
+          - name: slug
+          - name: email
+          - name: full_name
+          - name: products
+      container:
+        image: nouchka/sqlite3:latest
+        command: [sh, -c]
+        args:
+          - |
+            set -e
+            SLUG="{{inputs.parameters.slug}}"
+            EMAIL="{{inputs.parameters.email}}"
+            FULL_NAME="{{inputs.parameters.full_name}}"
+            PRODUCTS="{{inputs.parameters.products}}"
+            DB_DIR="/workspace/${SLUG}"
+            DB_FILE="${DB_DIR}/workspace.db"
+
+            echo "Provisioning partner DB for ${SLUG}..."
+            mkdir -p "${DB_DIR}"
+
+            sqlite3 "${DB_FILE}" "
+            PRAGMA journal_mode=WAL;
+            PRAGMA foreign_keys=ON;
+
+            CREATE TABLE IF NOT EXISTS users (
+              id         INTEGER PRIMARY KEY AUTOINCREMENT,
+              email      TEXT UNIQUE NOT NULL,
+              full_name  TEXT,
+              role       TEXT NOT NULL DEFAULT 'member',
+              status     TEXT NOT NULL DEFAULT 'active',
+              created_at INTEGER DEFAULT (unixepoch()),
+              updated_at INTEGER DEFAULT (unixepoch())
+            );
+
+            CREATE TABLE IF NOT EXISTS roles (
+              id          INTEGER PRIMARY KEY AUTOINCREMENT,
+              name        TEXT UNIQUE NOT NULL,
+              permissions TEXT NOT NULL DEFAULT '[]',
+              created_at  INTEGER DEFAULT (unixepoch())
+            );
+
+            CREATE TABLE IF NOT EXISTS auth_tokens (
+              id         INTEGER PRIMARY KEY AUTOINCREMENT,
+              token      TEXT UNIQUE NOT NULL,
+              email      TEXT NOT NULL,
+              expires_at INTEGER NOT NULL,
+              used       INTEGER NOT NULL DEFAULT 0,
+              created_at INTEGER DEFAULT (unixepoch())
+            );
+
+            CREATE TABLE IF NOT EXISTS playground_products (
+              id          INTEGER PRIMARY KEY AUTOINCREMENT,
+              product_key TEXT UNIQUE NOT NULL,
+              status      TEXT NOT NULL DEFAULT 'enabled',
+              enabled_at  INTEGER DEFAULT (unixepoch())
+            );
+
+            INSERT OR IGNORE INTO roles (name, permissions) VALUES ('admin',  '[\"*\"]');
+            INSERT OR IGNORE INTO roles (name, permissions) VALUES ('editor', '[\"read\",\"write\"]');
+            INSERT OR IGNORE INTO roles (name, permissions) VALUES ('member', '[\"read\"]');
+
+            INSERT OR IGNORE INTO users (email, full_name, role, status)
+            VALUES ('${EMAIL}', '${FULL_NAME}', 'admin', 'active');
+            "
+
+            echo "Seeding products: ${PRODUCTS}"
+            for PRODUCT in $(echo "$PRODUCTS" | tr ',' ' '); do
+              sqlite3 "${DB_FILE}" "INSERT OR IGNORE INTO playground_products (product_key, status) VALUES ('${PRODUCT}', 'enabled');"
+            done
+
+            echo "Done. Partner DB at ${DB_FILE}"
+        volumeMounts:
+          - name: workspace-db
+            mountPath: /workspace
+
+    - name: notify-admin
+      inputs:
+        parameters:
+          - name: slug
+      http:
+        method: POST
+        url: "http://iraven-admin.iraven-admin.svc.cluster.local:8081/api/provisioning/complete"
+        headers:
+          - name: Content-Type
+            value: application/json
+        body: '{"slug":"{{inputs.parameters.slug}}","status":"completed"}'
+        successCondition: "response.statusCode == 200"
+        timeoutSeconds: 10

@@ -1,0 +1,25 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: workspace-provision-webhook-ingress
+  namespace: argo-events
+  annotations:
+    cert-manager.io/issuer: letsencrypt-k3s-master
+    kubernetes.io/ingress.class: nginx
+    nginx.ingress.kubernetes.io/proxy-body-size: "1m"
+spec:
+  tls:
+    - hosts:
+        - events.iraven.io
+      secretName: events-iraven-io-tls
+  rules:
+    - host: events.iraven.io
+      http:
+        paths:
+          - path: "/workspace-provision"
+            pathType: Prefix
+            backend:
+              service:
+                name: workspace-provision-webhook-eventsource-svc
+                port:
+                  number: 12001

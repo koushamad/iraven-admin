@@ -1,29 +1,58 @@
-import { getDb } from '@/lib/db'
+import { getDb, getWorkspaceDb } from '@/lib/db'
 import Link from 'next/link'
+import DashboardRequestsTable from '@/components/admin/DashboardRequestsTable'
 
 export default function AdminDashboard() {
   const db = getDb()
+  const adb = getWorkspaceDb()
+
+  // Web stats
   const productCount = (db.prepare('SELECT COUNT(*) as c FROM products WHERE active=1').get() as { c: number }).c
   const founderCount = (db.prepare('SELECT COUNT(*) as c FROM founders WHERE active=1').get() as { c: number }).c
   const engineCount  = (db.prepare('SELECT COUNT(*) as c FROM engine_systems WHERE active=1').get() as { c: number }).c
-  const adminCount   = (db.prepare('SELECT COUNT(*) as c FROM admins').get() as { c: number }).c
 
-  const stats = [
-    { label: 'Live products', value: productCount, href: '/admin/products', color: '#4be1ec', sub: 'Orbiting the studio' },
-    { label: 'Founders', value: founderCount, href: '/admin/founders', color: '#cb5eee', sub: 'Active profiles' },
-    { label: 'Engine systems', value: engineCount, href: '/admin/engine', color: '#2ee8c4', sub: 'Shared infrastructure' },
-    { label: 'Admin users', value: adminCount, href: '/admin/admins', color: '#f5c842', sub: 'Access granted' },
+  // Workspace stats
+  const pendingPlayground = (adb.prepare("SELECT COUNT(*) as c FROM playground_requests WHERE status IN ('submitted','pending_review')").get() as { c: number }).c
+  const pendingProduct    = (adb.prepare("SELECT COUNT(*) as c FROM product_access_requests WHERE status IN ('submitted','pending_review')").get() as { c: number }).c
+  const pendingRequests   = pendingPlayground + pendingProduct
+  const activePlaygrounds = (adb.prepare("SELECT COUNT(*) as c FROM playgrounds WHERE status='active'").get() as { c: number }).c
+  const failedPayments    = (adb.prepare("SELECT COUNT(*) as c FROM playgrounds WHERE billing_status='payment_failed'").get() as { c: number }).c
+  const lockedCount       = (adb.prepare("SELECT COUNT(*) as c FROM playgrounds WHERE status='locked'").get() as { c: number }).c
+
+  // Recent pending requests (last 5 combined)
+  const recentPR = adb.prepare(`
+    SELECT id, full_name, company_name, work_email, 'playground' as type, requested_slug as ref, status, created_at
+    FROM playground_requests WHERE status IN ('submitted','pending_review')
+    UNION ALL
+    SELECT id, full_name, company_name, work_email, 'product-access' as type, product_key as ref, status, created_at
+    FROM product_access_requests WHERE status IN ('submitted','pending_review')
+    ORDER BY created_at DESC LIMIT 5
+  `).all().map((r: unknown) => ({ ...(r as object) })) as {
+    id: number; full_name: string; company_name: string; work_email: string
+    type: string; ref: string; status: string; created_at: number
+  }[]
+
+  // Playgrounds needing attention
+  const attentionPlaygrounds = adb.prepare(`
+    SELECT slug, display_name, status, billing_status FROM playgrounds
+    WHERE status IN ('payment_failed','locked','suspended')
+  `).all().map((r: unknown) => ({ ...(r as object) })) as { slug: string; display_name: string; status: string; billing_status: string }[]
+
+  const workspaceStats = [
+    { label: 'Pending requests', value: pendingRequests, href: '/admin/requests', color: '#4be1ec', sub: 'Awaiting review' },
+    { label: 'Active playgrounds', value: activePlaygrounds, href: '/admin/playgrounds', color: '#2ee8c4', sub: 'Running workspaces' },
+    { label: 'Failed payments', value: failedPayments, href: '/admin/billing', color: failedPayments > 0 ? '#ff6b6b' : '#5a6080', sub: 'Needs attention' },
+    { label: 'Locked', value: lockedCount, href: '/admin/playgrounds', color: lockedCount > 0 ? '#f5c842' : '#5a6080', sub: 'Access suspended' },
   ]
 
-  const actions = [
-    { href: '/admin/products/new', label: 'Add new product', sub: 'Create an orbiting product', color: '#4be1ec', icon: 'M12 5v14M5 12h14' },
-    { href: '/admin/founders/new', label: 'Add founder', sub: 'Add a founder profile', color: '#cb5eee', icon: 'M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2M12 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8z' },
-    { href: '/admin/hero', label: 'Edit hero section', sub: 'Boot sequence, stats, labels', color: '#2ee8c4', icon: 'M4 7V4h16v3M9 20h6M12 4v16' },
-    { href: '/admin/engine', label: 'Edit engine', sub: 'Systems and capabilities', color: '#f5c842', icon: 'M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6zM19.07 4.93a10 10 0 0 1 0 14.14M4.93 4.93a10 10 0 0 0 0 14.14' },
+  const webStats = [
+    { label: 'Live products', value: productCount, href: '/admin/products', color: '#4be1ec' },
+    { label: 'Founders', value: founderCount, href: '/admin/founders', color: '#cb5eee' },
+    { label: 'Engine systems', value: engineCount, href: '/admin/engine', color: '#2ee8c4' },
   ]
 
   return (
-    <div style={{ padding: '36px 40px', maxWidth: 920 }}>
+    <div style={{ padding: '36px 40px', maxWidth: 960 }}>
 
       {/* Header */}
       <div style={{ marginBottom: 36 }}>
@@ -32,12 +61,31 @@ export default function AdminDashboard() {
           <span style={{ fontFamily: 'var(--font-display)', fontSize: 11, letterSpacing: '0.22em', textTransform: 'uppercase', color: '#2ee8c4' }}>RavenOS v1</span>
         </div>
         <h1 style={{ fontFamily: 'var(--font-display)', fontSize: 28, fontWeight: 700, color: '#e8eaf2', letterSpacing: '-0.03em', margin: 0 }}>Mission Control</h1>
-        <p style={{ color: '#333849', fontSize: 14, marginTop: 6 }}>Manage your IRaven content, products, and team.</p>
+        <p style={{ color: '#333849', fontSize: 14, marginTop: 6 }}>Manage workspaces, requests, platform users, and content.</p>
       </div>
 
-      {/* Stats grid */}
-      <div className="admin-stat-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 14, marginBottom: 32 }}>
-        {stats.map(s => (
+      {/* Attention banner */}
+      {attentionPlaygrounds.length > 0 && (
+        <div style={{ background: 'rgba(255,107,107,0.08)', border: '1px solid rgba(255,107,107,0.2)', borderRadius: 12, padding: '14px 18px', marginBottom: 24, display: 'flex', alignItems: 'flex-start', gap: 12 }}>
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#ff6b6b" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0, marginTop: 1 }}><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+          <div>
+            <div style={{ fontFamily: 'var(--font-display)', fontSize: 13, fontWeight: 600, color: '#ff6b6b', marginBottom: 4 }}>Attention required</div>
+            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+              {attentionPlaygrounds.map(p => (
+                <Link key={p.slug} href={`/admin/playgrounds/${p.slug}`}
+                  style={{ fontSize: 12, color: '#ff6b6b', fontFamily: 'var(--font-display)', textDecoration: 'none', background: 'rgba(255,107,107,0.1)', padding: '3px 10px', borderRadius: 6, border: '1px solid rgba(255,107,107,0.2)' }}>
+                  {p.display_name} — {p.status.replace(/_/g, ' ')}
+                </Link>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Workspace stats */}
+      <div style={{ fontFamily: 'var(--font-display)', fontSize: 10.5, letterSpacing: '0.22em', textTransform: 'uppercase', color: '#333849', marginBottom: 12 }}>Workspace</div>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 14, marginBottom: 32 }}>
+        {workspaceStats.map(s => (
           <Link key={s.label} href={s.href} className="admin-stat-card" style={{ '--card-color': s.color } as React.CSSProperties}>
             <div className="admin-stat-glow" />
             <div style={{ fontFamily: 'var(--font-display)', fontSize: 36, fontWeight: 700, color: s.color, lineHeight: 1, letterSpacing: '-0.03em' }}>{s.value}</div>
@@ -47,21 +95,25 @@ export default function AdminDashboard() {
         ))}
       </div>
 
-      {/* Quick actions */}
-      <div style={{ fontFamily: 'var(--font-display)', fontSize: 10.5, letterSpacing: '0.22em', textTransform: 'uppercase', color: '#333849', marginBottom: 12 }}>Quick actions</div>
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
-        {actions.map(a => (
-          <Link key={a.href} href={a.href} className="admin-action-card" style={{ '--card-color': a.color } as React.CSSProperties}>
-            <div className="admin-action-icon">
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <path d={a.icon} />
-              </svg>
-            </div>
-            <div>
-              <div style={{ fontSize: 13.5, fontWeight: 500, color: '#d0d4e8', fontFamily: 'var(--font-display)' }}>{a.label}</div>
-              <div style={{ fontSize: 11.5, color: '#333849', marginTop: 2 }}>{a.sub}</div>
-            </div>
-            <svg style={{ marginLeft: 'auto', flexShrink: 0, color: '#333849' }} width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>
+      {/* Pending requests table */}
+      {recentPR.length > 0 && (
+        <div style={{ marginBottom: 32 }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
+            <div style={{ fontFamily: 'var(--font-display)', fontSize: 10.5, letterSpacing: '0.22em', textTransform: 'uppercase', color: '#333849' }}>Pending requests</div>
+            <Link href="/admin/requests" style={{ fontSize: 11.5, color: '#4be1ec', fontFamily: 'var(--font-display)', textDecoration: 'none', opacity: 0.7 }}>View all →</Link>
+          </div>
+          <DashboardRequestsTable rows={recentPR} />
+        </div>
+      )}
+
+      {/* Web content stats */}
+      <div style={{ fontFamily: 'var(--font-display)', fontSize: 10.5, letterSpacing: '0.22em', textTransform: 'uppercase', color: '#333849', marginBottom: 12 }}>Web content</div>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 14 }}>
+        {webStats.map(s => (
+          <Link key={s.label} href={s.href} className="admin-stat-card" style={{ '--card-color': s.color } as React.CSSProperties}>
+            <div className="admin-stat-glow" />
+            <div style={{ fontFamily: 'var(--font-display)', fontSize: 32, fontWeight: 700, color: s.color, lineHeight: 1, letterSpacing: '-0.03em' }}>{s.value}</div>
+            <div style={{ fontFamily: 'var(--font-display)', fontSize: 13, color: '#a9aec5', marginTop: 6, fontWeight: 500 }}>{s.label}</div>
           </Link>
         ))}
       </div>
@@ -75,20 +127,6 @@ export default function AdminDashboard() {
         }
         .admin-stat-card:hover { border-color: color-mix(in srgb, var(--card-color) 30%, transparent); box-shadow: 0 0 30px -10px color-mix(in srgb, var(--card-color) 40%, transparent); }
         .admin-stat-glow { position:absolute;top:-30px;right:-20px;width:90px;height:90px;border-radius:50%;background:var(--card-color);opacity:.06;filter:blur(20px);pointer-events:none; }
-        .admin-action-card {
-          display: flex; align-items: center; gap: 14; text-decoration: none;
-          border-radius: 14px; background: rgba(12,17,32,0.7);
-          border: 1px solid rgba(255,255,255,0.07); padding: 16px 18px;
-          transition: border-color .2s; gap: 14px;
-        }
-        .admin-action-card:hover { border-color: color-mix(in srgb, var(--card-color) 30%, transparent); }
-        .admin-action-icon {
-          width: 38px; height: 38px; border-radius: 10px; flex-shrink: 0;
-          background: color-mix(in srgb, var(--card-color) 10%, transparent);
-          border: 1px solid color-mix(in srgb, var(--card-color) 25%, transparent);
-          display: flex; align-items: center; justify-content: center;
-          color: var(--card-color);
-        }
       `}</style>
     </div>
   )

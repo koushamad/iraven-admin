@@ -1,5 +1,6 @@
 import type { Metadata } from 'next'
 import './globals.css'
+import StarfieldCanvas from '@/components/StarfieldCanvas'
 
 export const metadata: Metadata = {
   title: 'IRaven Admin — Mission Control',
@@ -20,9 +21,13 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <svg width="0" height="0" style={{ position: 'absolute', overflow: 'hidden' }} aria-hidden
           dangerouslySetInnerHTML={{ __html: ravenLogoSvg }}
         />
-        <div className="ambient" aria-hidden="true" />
+        <div className="ambient" aria-hidden="true">
+          <div className="orb-violet" />
+          <div className="orb-cyan" />
+        </div>
         <div className="site-grid" aria-hidden="true" />
         <div className="grain" aria-hidden="true" />
+        <StarfieldCanvas opacity={0.45} />
         {children}
       </body>
     </html>

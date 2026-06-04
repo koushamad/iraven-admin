@@ -21,7 +21,6 @@ CREATE TABLE IF NOT EXISTS service_users (
   created_at   INTEGER DEFAULT (unixepoch())
 );
 
--- permissions: 'r' = read-only, 'rw' = read + write (can upload new versions)
 CREATE TABLE IF NOT EXISTS service_db_access (
   id          INTEGER PRIMARY KEY AUTOINCREMENT,
   service_id  INTEGER REFERENCES service_users(id) ON DELETE CASCADE,
@@ -30,7 +29,6 @@ CREATE TABLE IF NOT EXISTS service_db_access (
   UNIQUE(service_id, db_name)
 );
 
--- Tracks the current version number for each db file
 CREATE TABLE IF NOT EXISTS db_registry (
   db_name    TEXT PRIMARY KEY,
   version    INTEGER NOT NULL DEFAULT 1,
@@ -76,7 +74,6 @@ export function hashSecret(secret: string): string {
 export interface ServiceAuthResult {
   serviceId: number
   serviceName: string
-  /** db_name → permissions ('r' | 'rw') */
   access: Record<string, 'r' | 'rw'>
 }
 

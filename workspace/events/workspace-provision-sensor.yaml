@@ -1,0 +1,51 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Sensor
+metadata:
+  name: workspace-provision-sensor
+  namespace: argo-events
+spec:
+  template:
+    serviceAccountName: argo-events-sa
+  dependencies:
+    - name: provision-event
+      eventSourceName: workspace-provision-webhook
+      eventName: provision
+  triggers:
+    - template:
+        name: workspace-provision-trigger
+        k8s:
+          operation: create
+          source:
+            resource:
+              apiVersion: argoproj.io/v1alpha1
+              kind: Workflow
+              metadata:
+                generateName: workspace-provision-
+                namespace: argo-workflows
+              spec:
+                serviceAccountName: argo-events-sa
+                workflowTemplateRef:
+                  name: workspace-provision
+                arguments:
+                  parameters:
+                    - name: slug
+                    - name: email
+                    - name: full_name
+                    - name: products
+          parameters:
+            - src:
+                dependencyName: provision-event
+                dataKey: body.slug
+              dest: spec.arguments.parameters.0.value
+            - src:
+                dependencyName: provision-event
+                dataKey: body.email
+              dest: spec.arguments.parameters.1.value
+            - src:
+                dependencyName: provision-event
+                dataKey: body.full_name
+              dest: spec.arguments.parameters.2.value
+            - src:
+                dependencyName: provision-event
+                dataKey: body.products
+              dest: spec.arguments.parameters.3.value
