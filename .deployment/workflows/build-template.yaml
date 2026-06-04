@@ -1,0 +1,57 @@
+apiVersion: argoproj.io/v1alpha1
+kind: WorkflowTemplate
+metadata:
+  name: iraven-admin-build-template
+spec:
+  templates:
+    - name: create-manifest-list
+      retryStrategy:
+        limit: "5"
+        retryPolicy: "Always"
+        backoff:
+          duration: "30s"
+          factor: "2"
+          maxDuration: "15m"
+      inputs:
+        parameters:
+          - name: docker-tag
+      container:
+        image: harbor-registry.tail02a6d.ts.net/library/docker:20.10.16-dind
+        command: [sh, -c]
+        args:
+          - |
+            set -e
+            dockerd-entrypoint.sh &
+            for i in $(seq 1 30); do docker info >/dev/null 2>&1 && break; sleep 2; done
+            docker info || exit 1
+            DOCKER_TAG="{{inputs.parameters.docker-tag}}"
+            DOCKER_TAG=$(echo "$DOCKER_TAG" | sed 's|refs/tags/||; s|refs/heads/||')
+            REGISTRY=harbor-registry.tail02a6d.ts.net/application-images
+            echo "$HARBOR_PASSWORD" | docker login harbor-registry.tail02a6d.ts.net -u $HARBOR_USERNAME --password-stdin
+            docker buildx imagetools create \
+              -t $REGISTRY/iraven-admin:${DOCKER_TAG} \
+              -t $REGISTRY/iraven-admin:latest \
+              $REGISTRY/iraven-admin:${DOCKER_TAG}-amd64 \
+              $REGISTRY/iraven-admin:${DOCKER_TAG}-arm64
+        env:
+          - name: DOCKER_TLS_CERTDIR
+            value: ""
+          - name: HARBOR_USERNAME
+            valueFrom:
+              secretKeyRef:
+                name: harbor-credentials
+                key: username
+          - name: HARBOR_PASSWORD
+            valueFrom:
+              secretKeyRef:
+                name: harbor-credentials
+                key: password
+        securityContext:
+          privileged: true
+        resources:
+          requests:
+            memory: "1Gi"
+            cpu: "500m"
+          limits:
+            memory: "4Gi"
+            cpu: "2"

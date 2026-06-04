@@ -1,0 +1,50 @@
+apiVersion: argoproj.io/v1alpha1
+kind: WorkflowTemplate
+metadata:
+  name: iraven-admin-git-template
+spec:
+  templates:
+    - name: update-version-and-push
+      retryStrategy:
+        limit: 3
+        backoff:
+          duration: "10s"
+          factor: 2
+      inputs:
+        parameters:
+          - name: docker-tag
+          - name: repository
+          - name: branch
+      container:
+        image: harbor-registry.tail02a6d.ts.net/library/alpine-ci:3.18
+        command: ["/bin/sh", "-c"]
+        args:
+          - |
+            mkdir -p /root/.ssh
+            cp /ssh-keys/id_rsa /root/.ssh/id_rsa
+            chmod 600 /root/.ssh/id_rsa
+            ssh-keyscan github.com >> /root/.ssh/known_hosts
+
+            REPO_URL="git@github.com:koushamad/iraven-admin.git"
+            rm -rf /tmp/repo
+            git clone "$REPO_URL" /tmp/repo || { echo "Failed to clone repository"; exit 1; }
+            cd /tmp/repo || exit 1
+
+            DOCKER_TAG="{{inputs.parameters.docker-tag}}"
+            DOCKER_TAG=$(echo "$DOCKER_TAG" | sed 's|refs/tags/||')
+
+            cd .deployment/admin || { echo "Failed to change to .deployment/admin directory"; exit 1; }
+            sed -i 's/tag: ".*"/tag: "'${DOCKER_TAG}'"/' version-values.yaml
+
+            echo "Updated version-values.yaml:"
+            cat version-values.yaml
+
+            cd /tmp/repo
+            git add .deployment/admin/version-values.yaml
+            git commit -m "Deploy version ${DOCKER_TAG} to Harbor" || { echo "No changes to commit"; exit 0; }
+            git push -f origin {{inputs.parameters.branch}} || { echo "Failed to push to repository"; exit 1; }
+
+            echo "Successfully updated and pushed version ${DOCKER_TAG}"
+        volumeMounts:
+          - name: ssh-key
+            mountPath: /ssh-keys
