@@ -12,11 +12,15 @@ RUN npm ci
 
 COPY . .
 
-# Seed the DB so the standalone image ships with initial data
-RUN npm run db:seed 2>/dev/null || true
-
 ENV NEXT_TELEMETRY_DISABLED=1
 RUN npm run build
+
+# Compile internal service-to-service server to a standalone JS bundle
+RUN npx esbuild internal-server.ts \
+    --bundle --platform=node --target=node22 \
+    --external:node:sqlite --external:node:http --external:node:fs \
+    --external:node:path --external:node:crypto \
+    --outfile=internal-server.js
 
 # ── Production stage ───────────────────────────────────────────────────────────
 FROM ${NODE_IMAGE} AS runner
@@ -28,19 +32,21 @@ WORKDIR /app
 
 ENV NODE_ENV=production
 ENV PORT=8081
+ENV INTERNAL_PORT=3003
 ENV NEXT_TELEMETRY_DISABLED=1
 
 COPY --from=builder /app/public ./public
 COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
 COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
+COPY --from=builder --chown=nextjs:nodejs /app/internal-server.js ./
 
-# Seeded DB ships in the image; runtime PVC overlays /data/iraven.db
-COPY --from=builder --chown=nextjs:nodejs /app/iraven.db ./iraven.db
+COPY --chown=nextjs:nodejs start.sh ./
+RUN chmod +x start.sh
 
 USER nextjs
-EXPOSE 8081
+EXPOSE 8081 3003
 
 HEALTHCHECK --interval=30s --timeout=5s --start-period=15s --retries=3 \
   CMD wget -q -O /dev/null http://localhost:8081/api/health || exit 1
 
-CMD ["node", "server.js"]
+CMD ["./start.sh"]
