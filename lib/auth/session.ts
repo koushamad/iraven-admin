@@ -1,6 +1,6 @@
 import { cookies } from 'next/headers'
 import { nanoid } from 'nanoid'
-import { getDb } from '@/lib/db'
+import { getAdminDb as getDb } from '@/lib/db'
 
 const SESSION_COOKIE = 'iraven_session'
 const SESSION_DURATION = 7 * 24 * 60 * 60 // 7 days in seconds

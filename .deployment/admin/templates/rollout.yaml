@@ -46,6 +46,9 @@ spec:
             - name: http
               containerPort: {{ .Values.service.port }}
               protocol: TCP
+            - name: internal
+              containerPort: 3003
+              protocol: TCP
           envFrom:
             - secretRef:
                 name: {{ include "iraven-admin.fullname" . }}

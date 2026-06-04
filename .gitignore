@@ -4,3 +4,8 @@ node_modules/
 *.db-shm
 *.db-wal
 tsconfig.tsbuildinfo
+.DS_Store
+
+# SQLite databases
+db/*.db
+*.db

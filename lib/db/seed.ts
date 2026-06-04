@@ -168,7 +168,5 @@ const content = [
 ]
 for (const c of content) upsertContent.run(c)
 
-// ── Admins ────────────────────────────────────────────────────────────────────
-db.prepare('INSERT OR IGNORE INTO admins (email) VALUES (?)').run('kousha@iraven.io')
 
 console.log('Database seeded successfully.')

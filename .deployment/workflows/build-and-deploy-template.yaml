@@ -1,14 +1,14 @@
 apiVersion: argoproj.io/v1alpha1
 kind: WorkflowTemplate
 metadata:
-  name: iraven-web-build-and-deploy-template
+  name: iraven-admin-build-and-deploy-template
 spec:
   entrypoint: build-and-deploy-dag
   onExit: cleanup-workspace
   arguments:
     parameters:
       - name: repository
-        value: "git@github.com:iRavenIO/iRaven-Web.git"
+        value: "git@github.com:iRavenIO/iRaven-Admin.git"
       - name: branch
         value: "master"
       - name: commit
@@ -16,7 +16,7 @@ spec:
       - name: docker-tag
         value: "latest"
       - name: namespace
-        value: "iraven-web"
+        value: "iraven-admin"
   templates:
     - name: build-and-deploy-dag
       dag:
@@ -35,7 +35,7 @@ spec:
                     apiVersion: batch/v1
                     kind: Job
                     metadata:
-                      generateName: iraven-web-amd64-clone-
+                      generateName: iraven-admin-amd64-clone-
                       namespace: argo-workflows
                     spec:
                       backoffLimit: 0
@@ -53,7 +53,7 @@ spec:
                                   set -e
                                   apk add --no-cache git >/dev/null
                                   TOKEN=$(cat /etc/github-token/token)
-                                  REPO=https://x-access-token:${TOKEN}@github.com/iRavenIO/iRaven-Web.git
+                                  REPO=https://x-access-token:${TOKEN}@github.com/iRavenIO/iRaven-Admin.git
                                   rm -rf /workspace/source
                                   git clone --depth 1 -b "{{workflow.parameters.branch}}" "$REPO" /workspace/source
                                   echo CLONE_OK
@@ -80,7 +80,7 @@ spec:
                     apiVersion: batch/v1
                     kind: Job
                     metadata:
-                      generateName: iraven-web-amd64-build-
+                      generateName: iraven-admin-amd64-build-
                       namespace: argo-workflows
                     spec:
                       backoffLimit: 0
@@ -109,8 +109,8 @@ spec:
                                   DOCKER_TAG=$(echo "$DOCKER_TAG" | sed 's|refs/tags/||; s|refs/heads/||')
                                   docker build --no-cache \
                                     --build-arg NODE_IMAGE=harbor-registry.tail02a6d.ts.net/library/node:22-alpine \
-                                    -t harbor-registry.tail02a6d.ts.net/application-images/iraven-web:${DOCKER_TAG}-amd64 .
-                                  docker save harbor-registry.tail02a6d.ts.net/application-images/iraven-web:${DOCKER_TAG}-amd64 -o /workspace/iraven-web-${DOCKER_TAG}-amd64.tar
+                                    -t harbor-registry.tail02a6d.ts.net/application-images/iraven-admin:${DOCKER_TAG}-amd64 .
+                                  docker save harbor-registry.tail02a6d.ts.net/application-images/iraven-admin:${DOCKER_TAG}-amd64 -o /workspace/iraven-admin-${DOCKER_TAG}-amd64.tar
                               env:
                                 - { name: DOCKER_TLS_CERTDIR, value: "" }
                                 - name: HARBOR_USERNAME
@@ -139,7 +139,7 @@ spec:
                     apiVersion: batch/v1
                     kind: Job
                     metadata:
-                      generateName: iraven-web-amd64-push-
+                      generateName: iraven-admin-amd64-push-
                       namespace: argo-workflows
                     spec:
                       backoffLimit: 0
@@ -164,10 +164,10 @@ spec:
                                   docker info >/dev/null || { echo "ERROR: dockerd never became ready"; exit 1; }
                                   DOCKER_TAG={{workflow.parameters.docker-tag}}
                                   DOCKER_TAG=$(echo "$DOCKER_TAG" | sed 's|refs/tags/||; s|refs/heads/||')
-                                  docker load -i /workspace/iraven-web-${DOCKER_TAG}-amd64.tar
+                                  docker load -i /workspace/iraven-admin-${DOCKER_TAG}-amd64.tar
                                   echo "$HARBOR_PASSWORD" | docker login harbor-registry.tail02a6d.ts.net -u $HARBOR_USERNAME --password-stdin
-                                  docker tag harbor-registry.tail02a6d.ts.net/application-images/iraven-web:${DOCKER_TAG}-amd64 harbor-registry.tail02a6d.ts.net/application-images/iraven-web:${DOCKER_TAG}-amd64
-                                  docker push harbor-registry.tail02a6d.ts.net/application-images/iraven-web:${DOCKER_TAG}-amd64
+                                  docker tag harbor-registry.tail02a6d.ts.net/application-images/iraven-admin:${DOCKER_TAG}-amd64 harbor-registry.tail02a6d.ts.net/application-images/iraven-admin:${DOCKER_TAG}-amd64
+                                  docker push harbor-registry.tail02a6d.ts.net/application-images/iraven-admin:${DOCKER_TAG}-amd64
                               env:
                                 - { name: DOCKER_TLS_CERTDIR, value: "" }
                                 - name: HARBOR_USERNAME
@@ -192,7 +192,7 @@ spec:
                     apiVersion: batch/v1
                     kind: Job
                     metadata:
-                      generateName: iraven-web-arm64-clone-
+                      generateName: iraven-admin-arm64-clone-
                       namespace: argo-workflows
                     spec:
                       backoffLimit: 0
@@ -210,7 +210,7 @@ spec:
                                   set -e
                                   apk add --no-cache git >/dev/null
                                   TOKEN=$(cat /etc/github-token/token)
-                                  REPO=https://x-access-token:${TOKEN}@github.com/iRavenIO/iRaven-Web.git
+                                  REPO=https://x-access-token:${TOKEN}@github.com/iRavenIO/iRaven-Admin.git
                                   rm -rf /workspace/source
                                   git clone --depth 1 -b "{{workflow.parameters.branch}}" "$REPO" /workspace/source
                                   echo CLONE_OK
@@ -236,7 +236,7 @@ spec:
                     apiVersion: batch/v1
                     kind: Job
                     metadata:
-                      generateName: iraven-web-arm64-build-
+                      generateName: iraven-admin-arm64-build-
                       namespace: argo-workflows
                     spec:
                       backoffLimit: 0
@@ -266,8 +266,8 @@ spec:
                                   DOCKER_TAG=$(echo "$DOCKER_TAG" | sed 's|refs/tags/||; s|refs/heads/||')
                                   docker build --no-cache \
                                     --build-arg NODE_IMAGE=node:22-alpine \
-                                    -t harbor-registry.tail02a6d.ts.net/application-images/iraven-web:${DOCKER_TAG}-arm64 .
-                                  docker save harbor-registry.tail02a6d.ts.net/application-images/iraven-web:${DOCKER_TAG}-arm64 -o /workspace/iraven-web-${DOCKER_TAG}-arm64.tar
+                                    -t harbor-registry.tail02a6d.ts.net/application-images/iraven-admin:${DOCKER_TAG}-arm64 .
+                                  docker save harbor-registry.tail02a6d.ts.net/application-images/iraven-admin:${DOCKER_TAG}-arm64 -o /workspace/iraven-admin-${DOCKER_TAG}-arm64.tar
                               env:
                                 - { name: DOCKER_TLS_CERTDIR, value: "" }
                                 - name: HARBOR_USERNAME
@@ -298,7 +298,7 @@ spec:
                     apiVersion: batch/v1
                     kind: Job
                     metadata:
-                      generateName: iraven-web-arm64-push-
+                      generateName: iraven-admin-arm64-push-
                       namespace: argo-workflows
                     spec:
                       backoffLimit: 0
@@ -323,10 +323,10 @@ spec:
                                   docker info >/dev/null || { echo "ERROR: dockerd never became ready"; exit 1; }
                                   DOCKER_TAG={{workflow.parameters.docker-tag}}
                                   DOCKER_TAG=$(echo "$DOCKER_TAG" | sed 's|refs/tags/||; s|refs/heads/||')
-                                  docker load -i /workspace/iraven-web-${DOCKER_TAG}-arm64.tar
+                                  docker load -i /workspace/iraven-admin-${DOCKER_TAG}-arm64.tar
                                   echo "$HARBOR_PASSWORD" | docker login harbor-registry.tail02a6d.ts.net -u $HARBOR_USERNAME --password-stdin
-                                  docker tag harbor-registry.tail02a6d.ts.net/application-images/iraven-web:${DOCKER_TAG}-arm64 harbor-registry.tail02a6d.ts.net/application-images/iraven-web:${DOCKER_TAG}-arm64
-                                  docker push harbor-registry.tail02a6d.ts.net/application-images/iraven-web:${DOCKER_TAG}-arm64
+                                  docker tag harbor-registry.tail02a6d.ts.net/application-images/iraven-admin:${DOCKER_TAG}-arm64 harbor-registry.tail02a6d.ts.net/application-images/iraven-admin:${DOCKER_TAG}-arm64
+                                  docker push harbor-registry.tail02a6d.ts.net/application-images/iraven-admin:${DOCKER_TAG}-arm64
                               env:
                                 - { name: DOCKER_TLS_CERTDIR, value: "" }
                                 - name: HARBOR_USERNAME
@@ -341,13 +341,13 @@ spec:
                               persistentVolumeClaim: { claimName: {{workflow.name}}-pi-arm64-workspace }
                 - { name: timeout-seconds, value: "3600" }
           - name: create-manifest-list
-            templateRef: { name: iraven-web-build-template, template: create-manifest-list }
+            templateRef: { name: iraven-admin-build-template, template: create-manifest-list }
             dependencies: ["push-image-amd64", "push-image-arm64"]
             arguments:
               parameters:
                 - { name: docker-tag, value: "{{workflow.parameters.docker-tag}}" }
           - name: update-version-file
-            templateRef: { name: iraven-web-git-template, template: update-version-and-push }
+            templateRef: { name: iraven-admin-git-template, template: update-version-and-push }
             dependencies: ["create-manifest-list"]
             arguments:
               parameters:
@@ -372,7 +372,7 @@ spec:
                     apiVersion: batch/v1
                     kind: Job
                     metadata:
-                      generateName: iraven-web-amd64-cleanup-
+                      generateName: iraven-admin-amd64-cleanup-
                       namespace: argo-workflows
                     spec:
                       backoffLimit: 0
@@ -408,7 +408,7 @@ spec:
                     apiVersion: batch/v1
                     kind: Job
                     metadata:
-                      generateName: iraven-web-arm64-cleanup-
+                      generateName: iraven-admin-arm64-cleanup-
                       namespace: argo-workflows
                     spec:
                       backoffLimit: 0

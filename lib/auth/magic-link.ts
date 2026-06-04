@@ -1,5 +1,5 @@
 import { nanoid } from 'nanoid'
-import { getDb } from '@/lib/db'
+import { getAdminDb as getDb } from '@/lib/db'
 
 const TOKEN_DURATION = 15 * 60 // 15 minutes
 
@@ -25,5 +25,5 @@ export function verifyToken(token: string): string | null {
 
 export function isAdminEmail(email: string): boolean {
   const db = getDb()
-  return !!db.prepare('SELECT 1 FROM admins WHERE email=?').get(email)
+  return !!db.prepare('SELECT 1 FROM admin_users WHERE email=?').get(email)
 }

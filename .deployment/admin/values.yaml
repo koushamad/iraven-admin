@@ -24,7 +24,8 @@ app:
   env:
     NODE_ENV: production
     PORT: "8081"
-    DATABASE_PATH: /data/iraven.db
+    INTERNAL_PORT: "3003"
+    DB_DIR: /data
     APP_URL: https://admin.iraven.io
     SMTP_FROM: admin@iraven.io
 

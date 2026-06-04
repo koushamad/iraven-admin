@@ -1,19 +1,8 @@
-// Uses Node.js built-in sqlite (Node 22.5+, stable in Node 23+)
-import { DatabaseSync } from 'node:sqlite'
-import path from 'path'
-import { SCHEMA } from './schema'
-
-const DB_PATH = process.env.DATABASE_PATH ?? path.join(process.cwd(), 'iraven.db')
-
-let _db: DatabaseSync | null = null
-
-export function getDb(): DatabaseSync {
-  if (!_db) {
-    _db = new DatabaseSync(DB_PATH)
-    _db.exec(SCHEMA)
-  }
-  return _db
-}
+// Re-exports for backward compatibility.
+// Content routes use getDb() → web.db
+// Auth routes use getAdminDb() → admin.db
+export { getWebDb as getDb } from './web-db'
+export { getAdminDb } from './admin-db'
 
 export type Product = {
   id: number; key: string; name: string; initial: string; orbit: number
