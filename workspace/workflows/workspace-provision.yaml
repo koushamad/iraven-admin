@@ -13,12 +13,20 @@ spec:
       - name: products   # comma-separated list, e.g. "playground,media,ai"
 
   volumes:
-    # hostPath must match the directory that iRaven-Workspace mounts as WORKSPACE_DB_DIR.
-    # In production: /data/iraven/admin/db/workspace (the db/workspace/ subdirectory of admin's data volume).
+    # Partner workspace DBs — shared hostPath with admin PVC
     - name: workspace-db
       hostPath:
         path: /data/iraven/admin/db/workspace
         type: DirectoryOrCreate
+    # SSH key for git push operations
+    - name: ssh-key
+      secret:
+        secretName: github-ssh-key
+        defaultMode: 0600
+    # GitHub token for API calls and HTTPS clone
+    - name: github-token
+      secret:
+        secretName: github-token
 
   templates:
     - name: provision
@@ -35,6 +43,18 @@ spec:
                   value: "{{workflow.parameters.full_name}}"
                 - name: products
                   value: "{{workflow.parameters.products}}"
+        - - name: create-playground-repo
+            template: create-playground-repo
+            arguments:
+              parameters:
+                - name: slug
+                  value: "{{workflow.parameters.slug}}"
+        - - name: commit-argocd-configs
+            template: commit-argocd-configs
+            arguments:
+              parameters:
+                - name: slug
+                  value: "{{workflow.parameters.slug}}"
         - - name: notify-admin
             template: notify-admin
             arguments:
@@ -42,6 +62,7 @@ spec:
                 - name: slug
                   value: "{{workflow.parameters.slug}}"
 
+    # ── Step 1: create the per-partner SQLite DB ─────────────────────────────
     - name: create-partner-db
       inputs:
         parameters:
@@ -120,6 +141,174 @@ spec:
           - name: workspace-db
             mountPath: /workspace
 
+    # ── Step 2: create iRavenIO/playground-{slug} and push iRaven-Playground ─
+    - name: create-playground-repo
+      inputs:
+        parameters:
+          - name: slug
+      container:
+        image: harbor-registry.tail02a6d.ts.net/library/alpine-ci:3.18
+        command: ["/bin/sh", "-c"]
+        args:
+          - |
+            set -e
+            SLUG="{{inputs.parameters.slug}}"
+            TOKEN=$(cat /github-token/token)
+            REPO="iRavenIO/playground-${SLUG}"
+
+            echo "Creating GitHub repo ${REPO}..."
+            HTTP_STATUS=$(curl -s -o /tmp/gh-create.json -w "%{http_code}" \
+              -H "Authorization: token ${TOKEN}" \
+              -H "Content-Type: application/json" \
+              -X POST https://api.github.com/orgs/iRavenIO/repos \
+              -d "{\"name\":\"playground-${SLUG}\",\"private\":true,\"description\":\"iRaven Playground for ${SLUG}\"}")
+
+            if [ "$HTTP_STATUS" != "201" ]; then
+              echo "Repo creation returned HTTP ${HTTP_STATUS}:"
+              cat /tmp/gh-create.json
+              # 422 = already exists, treat as ok
+              if [ "$HTTP_STATUS" != "422" ]; then exit 1; fi
+              echo "Repo already exists, continuing."
+            fi
+
+            echo "Cloning iRaven-Playground..."
+            mkdir -p /root/.ssh
+            cp /ssh-key/id_rsa /root/.ssh/id_rsa
+            chmod 600 /root/.ssh/id_rsa
+            ssh-keyscan github.com >> /root/.ssh/known_hosts 2>/dev/null
+
+            rm -rf /tmp/playground
+            git clone git@github.com:iRavenIO/iRaven-Playground.git /tmp/playground
+            cd /tmp/playground
+
+            echo "Pushing to ${REPO}..."
+            git remote add partner git@github.com:${REPO}.git
+            git push partner main
+
+            echo "Done. Repo: https://github.com/${REPO}"
+        volumeMounts:
+          - name: github-token
+            mountPath: /github-token
+            readOnly: true
+          - name: ssh-key
+            mountPath: /ssh-key
+            readOnly: true
+
+    # ── Step 3: commit AppProject + Application YAMLs to iRaven-Admin ────────
+    - name: commit-argocd-configs
+      inputs:
+        parameters:
+          - name: slug
+      container:
+        image: harbor-registry.tail02a6d.ts.net/library/alpine-ci:3.18
+        command: ["/bin/sh", "-c"]
+        args:
+          - |
+            set -e
+            SLUG="{{inputs.parameters.slug}}"
+            REPO="iRavenIO/playground-${SLUG}"
+            NAMESPACE="playground-${SLUG}"
+            APP_NAME="playground-${SLUG}"
+            INGRESS_HOST="${SLUG}.iraven.io"
+            VAULT_SESSION_PATH="k3s-ha00/iraven/playground/${SLUG}/session"
+
+            echo "Setting up SSH..."
+            mkdir -p /root/.ssh
+            cp /ssh-key/id_rsa /root/.ssh/id_rsa
+            chmod 600 /root/.ssh/id_rsa
+            ssh-keyscan github.com >> /root/.ssh/known_hosts 2>/dev/null
+
+            echo "Cloning iRaven-Admin..."
+            rm -rf /tmp/admin
+            git clone git@github.com:koushamad/iraven-admin.git /tmp/admin
+            cd /tmp/admin
+
+            git config user.email "provision@iraven.io"
+            git config user.name "iRaven Provision"
+
+            echo "Writing AppProject for ${SLUG}..."
+            cat > workspace/projects/${APP_NAME}.yaml << YAML
+            apiVersion: argoproj.io/v1alpha1
+            kind: AppProject
+            metadata:
+              name: ${APP_NAME}
+              namespace: argocd
+              labels:
+                app: projects
+                type: playground
+                slug: ${SLUG}
+            spec:
+              description: Playground project for ${SLUG}
+              destinations:
+                - namespace: ${NAMESPACE}
+                  server: '*'
+              sourceRepos:
+                - git@github.com:${REPO}.git
+              clusterResourceWhitelist:
+                - group: '*'
+                  kind: '*'
+              namespaceResourceWhitelist:
+                - group: '*'
+                  kind: '*'
+            YAML
+
+            echo "Writing Application for ${SLUG}..."
+            cat > workspace/applications/${APP_NAME}.yaml << YAML
+            apiVersion: argoproj.io/v1alpha1
+            kind: Application
+            metadata:
+              name: ${APP_NAME}
+              namespace: argocd
+              finalizers:
+                - resources-finalizer.argocd.argoproj.io
+              labels:
+                app: applications
+                cluster: k3s-ha00
+                type: playground
+                slug: ${SLUG}
+              annotations:
+                argocd.argoproj.io/sync-wave: "0"
+            spec:
+              project: ${APP_NAME}
+              source:
+                repoURL: git@github.com:${REPO}.git
+                targetRevision: HEAD
+                path: .deployment/playground
+                helm:
+                  valueFiles:
+                    - "values.yaml"
+                    - "version-values.yaml"
+                  parameters:
+                    - name: slug
+                      value: ${SLUG}
+                    - name: ingress.host
+                      value: ${INGRESS_HOST}
+                    - name: session.secretPath
+                      value: ${VAULT_SESSION_PATH}
+              destination:
+                name: k3s-ha00
+                namespace: ${NAMESPACE}
+              syncPolicy:
+                automated:
+                  prune: true
+                  selfHeal: true
+                syncOptions:
+                  - CreateNamespace=true
+                  - ServerSideApply=true
+            YAML
+
+            echo "Committing and pushing..."
+            git add workspace/projects/${APP_NAME}.yaml workspace/applications/${APP_NAME}.yaml
+            git commit -m "provision: add ArgoCD project and application for ${SLUG}"
+            git push origin master
+
+            echo "Done. ArgoCD will auto-sync playground-${SLUG}."
+        volumeMounts:
+          - name: ssh-key
+            mountPath: /ssh-key
+            readOnly: true
+
+    # ── Step 4: notify admin of completed provisioning ────────────────────────
     - name: notify-admin
       inputs:
         parameters:
