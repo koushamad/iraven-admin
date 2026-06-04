@@ -99,7 +99,11 @@ backup:
 
 s3:
   enabled: true
-  secretPath: k3s-ha00/iraven/web/s3
+  secretPath: k3s-ha00/iraven/admin/s3
+
+internal:
+  enabled: true
+  secretPath: k3s-ha00/iraven/admin/internal
 
 argo-rollouts:
   enabled: true

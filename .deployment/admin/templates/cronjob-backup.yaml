@@ -26,12 +26,23 @@ spec:
                 - /bin/sh
                 - -c
                 - |
+                  set -e
                   TIMESTAMP=$(date +%Y%m%d-%H%M%S)
-                  BACKUP_KEY="iraven-admin/iraven-${TIMESTAMP}.db"
-                  aws s3 cp /data/iraven.db "s3://${S3_BUCKET}/${BACKUP_KEY}" \
-                    --endpoint-url "${S3_ENDPOINT}" \
-                    --region "${S3_REGION}"
-                  echo "Backup uploaded: ${BACKUP_KEY}"
+                  for DB in admin web; do
+                    if [ -f "/data/${DB}.db" ]; then
+                      KEY="db/${DB}-${TIMESTAMP}.db"
+                      aws s3 cp "/data/${DB}.db" "s3://${S3_BUCKET}/${KEY}" \
+                        --endpoint-url "${S3_ENDPOINT}" \
+                        --region "${S3_REGION}"
+                      # Keep a fixed "latest" pointer for restore
+                      aws s3 cp "/data/${DB}.db" "s3://${S3_BUCKET}/db/${DB}-latest.db" \
+                        --endpoint-url "${S3_ENDPOINT}" \
+                        --region "${S3_REGION}"
+                      echo "Backed up ${DB}.db → ${KEY}"
+                    else
+                      echo "Skipping ${DB}.db — not found"
+                    fi
+                  done
               env:
                 - name: AWS_ACCESS_KEY_ID
                   valueFrom:
